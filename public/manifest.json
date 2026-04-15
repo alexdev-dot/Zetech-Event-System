@@ -1,0 +1,22 @@
+{
+  "name": "Zetech Events Portal",
+  "short_name": "ZEP",
+  "description": "Zetech University Campus Events Portal — Discover, register, and attend campus events.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1426",
+  "theme_color": "#0B1426",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32 64x64",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "192x192",
+      "type": "image/x-icon",
+      "purpose": "any maskable"
+    }
+  ]
+}
