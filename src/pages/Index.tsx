@@ -1,21 +1,41 @@
+import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import HeroSection from "@/components/HeroSection";
 import EventCard from "@/components/EventCard";
-import { events } from "@/data/events";
+import { events, type Event } from "@/data/events";
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 const Index = () => {
-  const featuredEvent = events.find((e) => e.featured);
-  const upcomingEvents = events.filter((e) => !e.featured).slice(0, 4);
+  const [allEvents, setAllEvents] = useState<Event[]>(events);
+  
+  useEffect(() => {
+    // Load events from localStorage or use static events
+    const storedApprovedEvents = localStorage.getItem('approvedEvents');
+    let approvedEvents;
+    
+    if (storedApprovedEvents) {
+      const parsed = JSON.parse(storedApprovedEvents);
+      approvedEvents = parsed.length > 0 ? parsed : events;
+    } else {
+      localStorage.setItem('approvedEvents', JSON.stringify(events));
+      approvedEvents = events;
+    }
+    
+    setAllEvents(approvedEvents);
+  }, []);
+  
+  const featuredEvent = allEvents.find((e) => e.featured);
+  const upcomingEvents = allEvents.filter((e) => !e.featured).slice(0, 4);
+  
 
   return (
     <Layout>
       <HeroSection />
 
       {/* Featured Event */}
-      {featuredEvent && (
+      {featuredEvent ? (
         <section className="container py-12">
           <h2 className="font-heading text-2xl font-bold text-foreground mb-6">Featured Event</h2>
           <Link
@@ -44,6 +64,13 @@ const Index = () => {
             </div>
           </Link>
         </section>
+      ) : (
+        <section className="container py-12">
+          <div className="text-center py-16">
+            <h2 className="font-heading text-2xl font-bold text-foreground mb-4">No Featured Events</h2>
+            <p className="text-muted-foreground mb-6">There are currently no featured events. Check back soon for exciting campus activities!</p>
+          </div>
+        </section>
       )}
 
       {/* Upcoming Events */}
@@ -56,12 +83,20 @@ const Index = () => {
             </Link>
           </Button>
         </div>
-        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-          {upcomingEvents.map((event) => (
-            <EventCard key={event.id} event={event} />
-          ))}
-        </div>
+        {upcomingEvents.length > 0 ? (
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+            {upcomingEvents.map((event) => (
+              <EventCard key={event.id} event={event} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16">
+            <p className="text-lg text-muted-foreground mb-4">No upcoming events</p>
+            <p className="text-sm text-muted-foreground">Events will appear here once they are scheduled. Stay tuned!</p>
+          </div>
+        )}
       </section>
+
     </Layout>
   );
 };

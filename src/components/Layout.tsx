@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, Bell, User, LogOut, LogIn, Mail, Phone, MessageCircle, ChevronDown, Settings } from "lucide-react";
+import { Menu, X, Bell, User, LogOut, LogIn, Mail, Phone, MessageCircle, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import zetechLogo from "@/assets/zetech-logo.png";
@@ -153,11 +153,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               ) : (
                 <>
                   <Button variant="ghost" size="sm" asChild className="hidden md:flex">
-                    <Link to="/admin/login">
-                      <Settings className="w-4 h-4 mr-1" /> Admin
-                    </Link>
-                  </Button>
-                  <Button variant="ghost" size="sm" asChild className="hidden md:flex">
                     <Link to="/auth">
                       <LogIn className="w-4 h-4 mr-1" /> Sign In
                     </Link>
@@ -215,11 +210,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               ))}
               {!user && (
                 <div className="mt-4 pt-4 border-t">
-                  <Button variant="ghost" size="sm" asChild className="w-full justify-center mb-2">
-                    <Link to="/admin/login" onClick={() => setMobileOpen(false)}>
-                      <Settings className="w-4 h-4 mr-1" /> Admin Login
-                    </Link>
-                  </Button>
                   <Button variant="ghost" size="sm" asChild className="w-full justify-center">
                     <Link to="/auth" onClick={() => setMobileOpen(false)}>
                       <LogIn className="w-4 h-4 mr-1" /> Sign In

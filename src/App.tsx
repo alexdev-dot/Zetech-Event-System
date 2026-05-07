@@ -11,7 +11,6 @@ import MyEvents from "./pages/MyEvents";
 import CalendarPage from "./pages/CalendarPage";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
-import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import CreateEvent from "./pages/CreateEvent";
 import NotFound from "./pages/NotFound";
@@ -34,7 +33,6 @@ const App = () => (
             <Route path="/profile" element={<Profile />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/create-event" element={<CreateEvent />} />
-            <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

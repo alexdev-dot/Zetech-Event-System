@@ -1,9 +1,12 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
-import { events } from "@/data/events";
-import { Calendar, MapPin, Users, Clock, ArrowLeft, Share2, Facebook, Twitter, Link2, Mail } from "lucide-react";
+import { events, type Event } from "@/data/events";
+import { Calendar, MapPin, Users, Clock, ArrowLeft, Share2, Facebook, Twitter, Link2, Mail, CheckCircle, AlertCircle, QrCode, Download, Heart, Eye, Sparkles, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useState, useEffect } from "react";
@@ -12,6 +15,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
 const EventDetail = () => {
@@ -20,7 +24,21 @@ const EventDetail = () => {
   const navigate = useNavigate();
   const [isRegistered, setIsRegistered] = useState(false);
   const [registering, setRegistering] = useState(false);
-  const event = events.find((e) => e.id === id);
+  const [event, setEvent] = useState<Event | null>(null);
+  const [allEvents, setAllEvents] = useState<Event[]>(events);
+  const [showQRCode, setShowQRCode] = useState(false);
+
+  useEffect(() => {
+    // Load approved events from localStorage (includes static + approved user events)
+    const storedApprovedEvents = localStorage.getItem('approvedEvents');
+    const approvedEvents = storedApprovedEvents ? JSON.parse(storedApprovedEvents) : events;
+    
+    setAllEvents(approvedEvents);
+    
+    // Find the specific event
+    const foundEvent = approvedEvents.find((e) => e.id === id);
+    setEvent(foundEvent || null);
+  }, [id]);
 
   useEffect(() => {
     if (!user || !id) return;
@@ -36,10 +54,16 @@ const EventDetail = () => {
     return (
       <Layout>
         <div className="container py-20 text-center">
-          <h1 className="font-heading text-2xl font-bold mb-4">Event Not Found</h1>
-          <Button asChild>
-            <Link to="/events">Back to Events</Link>
-          </Button>
+          <div className="max-w-md mx-auto">
+            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="w-12 h-12 text-gray-400" />
+            </div>
+            <h1 className="font-heading text-3xl font-bold text-gray-900 mb-4">Event Not Found</h1>
+            <p className="text-gray-600 mb-6">The event you're looking for doesn't exist or has been removed.</p>
+            <Button asChild size="lg">
+              <Link to="/events">Browse All Events</Link>
+            </Button>
+          </div>
         </div>
       </Layout>
     );
@@ -47,6 +71,9 @@ const EventDetail = () => {
 
   const dateObj = new Date(event.date);
   const fillPercent = Math.round((event.registrations / event.capacity) * 100);
+  const isAlmostFull = fillPercent >= 80;
+  const isPastEvent = new Date(event.date) < new Date();
+  const spotsRemaining = event.capacity - event.registrations;
 
   const shareEvent = async (platform: string) => {
     const eventUrl = `${window.location.origin}/events/${event!.id}`;
@@ -128,124 +155,335 @@ const EventDetail = () => {
 
   return (
     <Layout>
-      {/* Hero banner */}
-      <div className="hero-gradient py-16">
-        <div className="container">
-          <Link to="/events" className="inline-flex items-center gap-1 text-primary-foreground/70 hover:text-primary-foreground text-sm mb-4 transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Back to Events
-          </Link>
-          <span className="inline-block bg-secondary text-secondary-foreground text-xs font-semibold px-3 py-1 rounded-full mb-4">
-            {event.category}
-          </span>
-          <h1 className="font-heading text-3xl md:text-4xl font-bold text-primary-foreground mb-2">{event.title}</h1>
-          <p className="text-primary-foreground/70">Organized by {event.organizer} • {event.department}</p>
+      {/* Enhanced Hero Section */}
+      <div className="relative min-h-[60vh] overflow-hidden">
+        {event?.posterUrl ? (
+          <div className="absolute inset-0">
+            <img 
+              src={event.posterUrl} 
+              alt={event.title}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
+          </div>
+        ) : (
+          <div className="absolute inset-0 hero-gradient">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
+          </div>
+        )}
+        
+        {/* Floating elements */}
+        <div className="absolute top-10 left-10 w-20 h-20 bg-white/10 rounded-full blur-2xl animate-pulse"></div>
+        <div className="absolute bottom-10 right-10 w-32 h-32 bg-white/5 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        
+        <div className="relative container h-full flex items-center py-20">
+          <div className="max-w-4xl">
+            <Link to="/events" className="inline-flex items-center gap-2 text-white/80 hover:text-white text-sm mb-6 transition-colors group">
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> 
+              Back to Events
+            </Link>
+            
+            <div className="flex flex-wrap items-center gap-3 mb-6">
+              <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
+                {event?.category}
+              </Badge>
+              {isPastEvent && (
+                <Badge variant="secondary" className="bg-gray-500/20 text-gray-300">
+                  Past Event
+                </Badge>
+              )}
+              {event.featured && (
+                <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-400/30">
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  Featured
+                </Badge>
+              )}
+            </div>
+            
+            <h1 className="font-heading text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-4 leading-tight">
+              {event?.title}
+            </h1>
+            
+            <div className="flex flex-wrap gap-6 text-white/90 mb-8">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-5 h-5" />
+                <span>{dateObj.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric" })}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                <span>{event.time}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-5 h-5" />
+                <span>{event.venue}, {event.campus}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                <span>{event.registrations}/{event.capacity} attending</span>
+              </div>
+            </div>
+            
+            <p className="text-white/80 text-lg mb-8 max-w-3xl">
+              Organized by {event?.organizer}
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="container py-10">
+      <div className="container py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main content */}
+          {/* Main Content */}
           <div className="lg:col-span-2 space-y-8">
-            <div className="bg-card rounded-lg p-6 card-shadow">
-              <h2 className="font-heading text-xl font-bold mb-4">About This Event</h2>
-              <p className="text-muted-foreground leading-relaxed">{event.description}</p>
-            </div>
+            {/* About Section */}
+            <Card className="border-0 shadow-xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-2xl">
+                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <Eye className="w-4 h-4 text-primary" />
+                  </div>
+                  About This Event
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-700 leading-relaxed text-lg">{event.description}</p>
+                
+                {/* Quick Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
+                  <div className="text-center p-4 bg-blue-50 rounded-xl">
+                    <div className="text-2xl font-bold text-blue-600">{event.capacity}</div>
+                    <div className="text-sm text-gray-600">Total Capacity</div>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 rounded-xl">
+                    <div className="text-2xl font-bold text-green-600">{spotsRemaining}</div>
+                    <div className="text-sm text-gray-600">Spots Left</div>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 rounded-xl">
+                    <div className="text-2xl font-bold text-purple-600">{event.campus}</div>
+                    <div className="text-sm text-gray-600">Campus</div>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 rounded-xl">
+                    <div className="text-2xl font-bold text-orange-600">{event.category}</div>
+                    <div className="text-sm text-gray-600">Category</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-            <div className="bg-card rounded-lg p-6 card-shadow">
-              <h2 className="font-heading text-xl font-bold mb-4">Event Details</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="flex items-start gap-3">
-                  <Calendar className="w-5 h-5 text-primary mt-0.5" />
-                  <div>
-                    <p className="font-medium text-sm">Date</p>
-                    <p className="text-muted-foreground text-sm">
-                      {dateObj.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-                    </p>
+            {/* Enhanced Event Details */}
+            <Card className="border-0 shadow-xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-2xl">
+                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <Calendar className="w-4 h-4 text-primary" />
+                  </div>
+                  Event Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl">
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Calendar className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-gray-900">Date & Time</div>
+                      <div className="text-gray-600 mt-1">
+                        {dateObj.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                      </div>
+                      <div className="text-gray-600">{event.time}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl">
+                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <MapPin className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-gray-900">Location</div>
+                      <div className="text-gray-600 mt-1">{event.venue}</div>
+                      <div className="text-gray-600">{event.campus} Campus</div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl">
+                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Users className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-gray-900">Attendance</div>
+                      <div className="text-gray-600 mt-1">{event.registrations} registered</div>
+                      <div className="text-gray-600">{event.capacity} max capacity</div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl">
+                    <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <TrendingUp className="w-6 h-6 text-orange-600" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-gray-900">Organizer</div>
+                      <div className="text-gray-600 mt-1">{event.organizer}</div>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-start gap-3">
-                  <Clock className="w-5 h-5 text-primary mt-0.5" />
-                  <div>
-                    <p className="font-medium text-sm">Time</p>
-                    <p className="text-muted-foreground text-sm">{event.time}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-5 h-5 text-primary mt-0.5" />
-                  <div>
-                    <p className="font-medium text-sm">Venue</p>
-                    <p className="text-muted-foreground text-sm">{event.venue}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Users className="w-5 h-5 text-primary mt-0.5" />
-                  <div>
-                    <p className="font-medium text-sm">Capacity</p>
-                    <p className="text-muted-foreground text-sm">{event.capacity} attendees</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Sidebar */}
+          {/* Enhanced Sidebar */}
           <div className="space-y-6">
-            <div className="bg-card rounded-lg p-6 card-shadow sticky top-24">
-              <h3 className="font-heading font-bold mb-4">Registration</h3>
-              <div className="mb-4">
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-muted-foreground">{event.registrations} registered</span>
-                  <span className="font-medium">{fillPercent}%</span>
+            {/* Registration Card */}
+            <Card className="border-0 shadow-xl sticky top-24">
+              <CardHeader>
+                <CardTitle className="text-xl">Register Now</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Registration Status */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Registration Progress</span>
+                    <span className={`font-semibold text-sm ${
+                      isAlmostFull ? 'text-orange-600' : fillPercent > 50 ? 'text-yellow-600' : 'text-green-600'
+                    }`}>
+                      {fillPercent}%
+                    </span>
+                  </div>
+                  <div className="relative h-3 w-full overflow-hidden rounded-full bg-secondary">
+                    <div 
+                      className="h-full w-full flex-1 transition-all"
+                      style={{
+                        transform: `translateX(-${100 - fillPercent}%)`,
+                        backgroundColor: isAlmostFull ? '#f97316' : fillPercent > 50 ? '#eab308' : '#22c55e'
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">{event.registrations} registered</span>
+                    <span className={`font-medium ${
+                      spotsRemaining <= 5 ? 'text-red-600' : 'text-gray-700'
+                    }`}>
+                      {spotsRemaining} spots left
+                    </span>
+                  </div>
                 </div>
-                <Progress value={fillPercent} className="h-2" />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {event.capacity - event.registrations} spots remaining
-                </p>
-              </div>
-              <Button
-                className="w-full mb-3"
-                size="lg"
-                onClick={handleRegister}
-                disabled={isRegistered || registering}
-              >
-                {isRegistered ? "✅ Registered" : registering ? "Registering..." : "Register Now"}
-              </Button>
-              
-              {/* Share Dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="w-full" size="lg">
-                    <Share2 className="w-4 h-4 mr-2" /> Share Event
+
+                {/* Urgency Indicator */}
+                {isAlmostFull && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-orange-700">
+                      <AlertCircle className="w-4 h-4" />
+                      <span className="text-sm font-medium">Almost Full!</span>
+                    </div>
+                    <p className="text-xs text-orange-600 mt-1">Only {spotsRemaining} spots remaining</p>
+                  </div>
+                )}
+
+                {/* Registration Button */}
+                {!isPastEvent ? (
+                  <Button
+                    className="w-full text-lg py-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                    size="lg"
+                    onClick={handleRegister}
+                    disabled={isRegistered || registering || spotsRemaining === 0}
+                  >
+                    {isRegistered ? (
+                      <>
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        Already Registered
+                      </>
+                    ) : registering ? (
+                      "Registering..."
+                    ) : spotsRemaining === 0 ? (
+                      "Event Full"
+                    ) : (
+                      <>
+                        <Users className="w-5 h-5 mr-2" />
+                        Register Now
+                      </>
+                    )}
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end">
-                  <DropdownMenuItem onClick={() => shareEvent('copy')} className="cursor-pointer">
-                    <Link2 className="w-4 h-4 mr-2" />
-                    Copy Link
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => shareEvent('facebook')} className="cursor-pointer">
-                    <Facebook className="w-4 h-4 mr-2" />
-                    Share on Facebook
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => shareEvent('twitter')} className="cursor-pointer">
-                    <Twitter className="w-4 h-4 mr-2" />
-                    Share on Twitter
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => shareEvent('email')} className="cursor-pointer">
-                    <Mail className="w-4 h-4 mr-2" />
-                    Share via Email
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => shareEvent('whatsapp')} className="cursor-pointer">
-                    <div className="w-4 h-4 mr-2 bg-green-500 rounded-sm" />
-                    Share on WhatsApp
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => shareEvent('native')} className="cursor-pointer">
-                    <Share2 className="w-4 h-4 mr-2" />
-                    More Options
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                ) : (
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <div className="text-gray-500 font-medium">This event has already passed</div>
+                  </div>
+                )}
+
+                {/* QR Code for Registered Users */}
+                {isRegistered && (
+                  <div className="text-center">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowQRCode(!showQRCode)}
+                      className="w-full"
+                    >
+                      <QrCode className="w-4 h-4 mr-2" />
+                      {showQRCode ? 'Hide' : 'Show'} QR Code
+                    </Button>
+                    {showQRCode && (
+                      <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                        <div className="w-48 h-48 bg-white rounded-lg mx-auto flex items-center justify-center">
+                          <QrCode className="w-32 h-32 text-gray-400" />
+                        </div>
+                        <p className="text-xs text-gray-600 mt-2">Show this code at the event entrance</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <Separator />
+
+                {/* Enhanced Share Options */}
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-gray-900">Share Event</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => shareEvent('facebook')}
+                      className="flex items-center gap-2"
+                    >
+                      <Facebook className="w-4 h-4" />
+                      Facebook
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => shareEvent('twitter')}
+                      className="flex items-center gap-2"
+                    >
+                      <Twitter className="w-4 h-4" />
+                      Twitter
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => shareEvent('whatsapp')}
+                      className="flex items-center gap-2"
+                    >
+                      <div className="w-4 h-4 bg-green-500 rounded-sm" />
+                      WhatsApp
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => shareEvent('copy')}
+                      className="flex items-center gap-2"
+                    >
+                      <Link2 className="w-4 h-4" />
+                      Copy Link
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Additional Actions */}
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="flex-1">
+                    <Heart className="w-4 h-4 mr-1" />
+                    Save
+                  </Button>
+                  <Button variant="outline" size="sm" className="flex-1">
+                    <Download className="w-4 h-4 mr-1" />
+                    Export
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

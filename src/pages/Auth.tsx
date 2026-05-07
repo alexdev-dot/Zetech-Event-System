@@ -6,58 +6,113 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
-import { LogIn, UserPlus, ArrowLeft } from "lucide-react";
+import { LogIn, Shield, GraduationCap, ArrowLeft, Eye, EyeOff, UserPlus, Lock, AlertCircle, Mail } from "lucide-react";
 import { useEffect } from "react";
 import zetechLogo from "@/assets/zetech-logo.png";
 import heroBgImage from "https://www.zetech.ac.ke/images/campuses/Ruiru_Campus.png";
 
 const Auth = () => {
-  const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
   const [admissionNumber, setAdmissionNumber] = useState("");
-  const [department, setDepartment] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"student" | "admin">("student");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isNewStudent, setIsNewStudent] = useState(false);
+  
+  // New student form states
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [newStudentPassword, setNewStudentPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  
   const navigate = useNavigate();
-  const { user, signIn } = useAuth();
+  const { user, signIn, createStudentAccount, adminSignIn } = useAuth();
 
   useEffect(() => {
-    if (user) navigate("/");
+    if (user) {
+      if (user.role === 'admin') {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/");
+      }
+    }
   }, [user, navigate]);
+
+  const handleCreateStudentAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      // Validation
+      if (!firstName.trim() || !lastName.trim()) {
+        throw new Error("First name and last name are required");
+      }
+      
+      if (!admissionNumber.trim()) {
+        throw new Error("Admission number is required");
+      }
+      
+      if (newStudentPassword.length < 6) {
+        throw new Error("Password must be at least 6 characters long");
+      }
+      
+      if (newStudentPassword !== confirmPassword) {
+        throw new Error("Passwords do not match");
+      }
+      
+      await createStudentAccount(firstName, lastName, admissionNumber, newStudentPassword);
+      toast({ 
+        title: "Account Created Successfully! 🎉", 
+        description: "Your student account has been created. You can now log in."
+      });
+      setIsNewStudent(false);
+      // Clear form
+      setFirstName("");
+      setLastName("");
+      setNewStudentPassword("");
+      setConfirmPassword("");
+    } catch (error: any) {
+      toast({ 
+        title: "Account Creation Error", 
+        description: error.message || "Failed to create account",
+        variant: "destructive" 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await signIn(email, password);
-      toast({ title: "Welcome back! 👋" });
-      navigate("/");
+      if (role === "admin") {
+        await adminSignIn(admissionNumber, password);
+        toast({ title: "Welcome Admin! 👋" });
+        navigate("/admin/dashboard");
+      } else {
+        // Student login - use admission number
+        await signIn(admissionNumber, password);
+        toast({ title: "Welcome back! 👋" });
+        navigate("/");
+      }
     } catch (error: any) {
-      toast({ title: "Login Failed", description: error.message || "Invalid credentials", variant: "destructive" });
+      toast({ 
+        title: "Authentication Error", 
+        description: error.message || "Invalid credentials",
+        variant: "destructive" 
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!fullName.trim() || !admissionNumber.trim()) {
-      toast({ title: "Missing fields", description: "Please fill in all required fields.", variant: "destructive" });
-      return;
-    }
-    setLoading(true);
-    try {
-      await signIn(email, password);
-      toast({ title: "Account created! 🎉" });
-      navigate("/");
-    } catch (error: any) {
-      toast({ title: "Signup Failed", description: error.message || "Could not create account", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const campuses = [
+    "Ruiru Campus",
+    "Mang'u Campus", 
+    "CBD (Nairobi Campus)"
+  ];
 
   return (
     <Layout>
@@ -80,7 +135,7 @@ const Auth = () => {
                     </Button>
                   </div>
 
-                  {/* Login Card - Full Height */}
+                  {/* Login/Create Account Card - Full Height */}
                   <div className="bg-white rounded-lg shadow-lg border border-gray-200 h-full flex flex-col justify-center">
                     <div className="p-8">
                       {/* Logo Section */}
@@ -91,100 +146,247 @@ const Auth = () => {
                           className="w-20 h-20 mx-auto mb-4 object-contain"
                         />
                         <h1 className="text-2xl font-bold text-gray-800 mb-2">Zetech Event Portal</h1>
-                        <p className="text-gray-600">Sign in to access your events and activities</p>
+                        <p className="text-gray-600">
+                          {isNewStudent ? "Create your student account" : "Sign in to access campus events"}
+                        </p>
                       </div>
 
                       <div className="mb-6">
                         <h2 className="text-xl font-semibold text-gray-800 mb-2">
-                          {isLogin ? "Welcome Back" : "Create Account"}
+                          {isNewStudent ? "Create Student Account" : "Welcome Back"}
                         </h2>
                         <p className="text-sm text-gray-600">
-                          {isLogin
-                            ? "Enter your credentials to access your account"
-                            : "Fill in your details to create a new account"}
+                          {isNewStudent 
+                            ? "Enter your details to create a new student account" 
+                            : "Enter your admission number and password to sign in"
+                          }
                         </p>
                       </div>
 
-                      <form onSubmit={isLogin ? handleLogin : handleSignup} className="space-y-4">
-                        {!isLogin && (
-                          <>
-                            <div>
-                              <Label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">Full Name</Label>
-                              <Input
-                                id="fullName"
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
-                                placeholder="Enter your full name"
-                                required
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
-                              />
+                      {/* Toggle between Login and Create Account */}
+                      <div className="mb-6">
+                        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <span className="text-sm text-gray-700">
+                            {isNewStudent ? "Already have an account?" : "New Student?"}
+                          </span>
+                          <Button
+                            variant="link"
+                            onClick={() => setIsNewStudent(!isNewStudent)}
+                            className="text-blue-600 hover:text-blue-700 p-0 h-auto font-medium"
+                          >
+                            {isNewStudent ? "Sign In" : "Create Account"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Role Selection - Only show for login */}
+                      {!isNewStudent && (
+                        <div className="mb-6">
+                          <Label className="block text-sm font-medium text-gray-700 mb-3">Select Your Role</Label>
+                          <RadioGroup value={role} onValueChange={(value) => setRole(value as "student" | "admin")} className="flex flex-col space-y-2">
+                            <div className="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                              <RadioGroupItem value="student" id="student" />
+                              <Label htmlFor="student" className="flex items-center cursor-pointer">
+                                <GraduationCap className="w-4 h-4 mr-2 text-blue-600" />
+                                <div>
+                                  <div className="font-medium">Student</div>
+                                  <div className="text-xs text-gray-500">Access events and activities</div>
+                                </div>
+                              </Label>
                             </div>
+                            <div className="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                              <RadioGroupItem value="admin" id="admin" />
+                              <Label htmlFor="admin" className="flex items-center cursor-pointer">
+                                <Shield className="w-4 h-4 mr-2 text-red-600" />
+                                <div>
+                                  <div className="font-medium">Administrator</div>
+                                  <div className="text-xs text-gray-500">Manage events and system</div>
+                                </div>
+                              </Label>
+                            </div>
+                          </RadioGroup>
+                        </div>
+                      )}
+
+                      {/* Login Form */}
+                      {!isNewStudent ? (
+                        <form onSubmit={handleLogin} className="space-y-4">
+                          {role === "student" && (
                             <div>
-                              <Label htmlFor="admissionNumber" className="block text-sm font-medium text-gray-700 mb-1">Admission Number</Label>
+                              <Label htmlFor="studentAdmission" className="block text-sm font-medium text-gray-700 mb-1">Admission Number</Label>
                               <Input
-                                id="admissionNumber"
+                                id="studentAdmission"
+                                type="text"
                                 value={admissionNumber}
                                 onChange={(e) => setAdmissionNumber(e.target.value)}
-                                placeholder="e.g. BSIT-001-2024"
+                                placeholder="Enter any admission number"
                                 required
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Any valid admission number format is accepted
+                              </p>
+                            </div>
+                          )}
+                          {role === "admin" && (
+                            <div>
+                              <Label htmlFor="adminIdentifier" className="block text-sm font-medium text-gray-700 mb-1">Admin ID/Email</Label>
+                              <Input
+                                id="adminIdentifier"
+                                type="text"
+                                value={admissionNumber}
+                                onChange={(e) => setAdmissionNumber(e.target.value)}
+                                placeholder="Admin ID or email"
+                                required
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Enter your admin identifier
+                              </p>
+                            </div>
+                          )}
+                          <div>
+                            <Label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</Label>
+                            <div className="relative">
+                              <Input
+                                id="password"
+                                type={showPassword ? "text" : "password"}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Enter your password"
+                                required
+                                minLength={6}
+                                className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                              >
+                                {showPassword ? (
+                                  <EyeOff className="w-4 h-4" />
+                                ) : (
+                                  <Eye className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-3 px-4 rounded-lg transition duration-200" disabled={loading}>
+                            {loading ? "Please wait..." : "Sign In"}
+                          </Button>
+                        </form>
+                      ) : (
+                        /* Create Student Account Form */
+                        <form onSubmit={handleCreateStudentAccount} className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">First Name</Label>
+                              <div className="relative">
+                                <UserPlus className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                <Input
+                                  id="firstName"
+                                  type="text"
+                                  value={firstName}
+                                  onChange={(e) => setFirstName(e.target.value)}
+                                  placeholder="John"
+                                  required
+                                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                              </div>
                             </div>
                             <div>
-                              <Label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">Department</Label>
+                              <Label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">Last Name</Label>
+                              <div className="relative">
+                                <UserPlus className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                <Input
+                                  id="lastName"
+                                  type="text"
+                                  value={lastName}
+                                  onChange={(e) => setLastName(e.target.value)}
+                                  placeholder="Doe"
+                                  required
+                                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <Label htmlFor="newStudentAdmission" className="block text-sm font-medium text-gray-700 mb-1">Admission Number</Label>
+                            <div className="relative">
+                              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                               <Input
-                                id="department"
-                                value={department}
-                                onChange={(e) => setDepartment(e.target.value)}
-                                placeholder="e.g. School of Computing & IT"
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                                id="newStudentAdmission"
+                                type="text"
+                                value={admissionNumber}
+                                onChange={(e) => setAdmissionNumber(e.target.value)}
+                                placeholder="Any admission number format"
+                                required
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               />
                             </div>
-                          </>
-                        )}
-                        <div>
-                          <Label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email Address</Label>
-                          <Input
-                            id="email"
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="your.email@zetech.ac.ke"
-                            required
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</Label>
-                          <Input
-                            id="password"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Enter your password"
-                            required
-                            minLength={6}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
-                          />
-                        </div>
-                        
-                        <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-3 px-4 rounded-lg transition duration-200" disabled={loading}>
-                          {loading ? "Please wait..." : isLogin ? "Sign In" : "Create Account"}
-                        </Button>
-                      </form>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Any admission number format is accepted (BSIT, DCS, BIT, etc.)
+                            </p>
+                          </div>
 
-                      <div className="mt-6 text-center">
-                        <span className="text-sm text-gray-600">
-                          {isLogin ? "Don't have an account?" : "Already have an account?"}
-                        </span>{" "}
-                        <button
-                          type="button"
-                          onClick={() => setIsLogin(!isLogin)}
-                          className="text-sm text-primary hover:text-primary/80 font-medium"
-                        >
-                          {isLogin ? "Sign Up" : "Sign In"}
-                        </button>
-                      </div>
+                          <div>
+                            <Label htmlFor="newStudentPassword" className="block text-sm font-medium text-gray-700 mb-1">Password</Label>
+                            <div className="relative">
+                              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                              <Input
+                                id="newStudentPassword"
+                                type={showPassword ? "text" : "password"}
+                                value={newStudentPassword}
+                                onChange={(e) => setNewStudentPassword(e.target.value)}
+                                placeholder="Create a password"
+                                required
+                                minLength={6}
+                                className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                              >
+                                {showPassword ? (
+                                  <EyeOff className="w-4 h-4" />
+                                ) : (
+                                  <Eye className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Minimum 6 characters
+                            </p>
+                          </div>
+
+                          <div>
+                            <Label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</Label>
+                            <div className="relative">
+                              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                              <Input
+                                id="confirmPassword"
+                                type={showPassword ? "text" : "password"}
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                placeholder="Confirm your password"
+                                required
+                                minLength={6}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+                          
+                          <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-3 px-4 rounded-lg transition duration-200" disabled={loading}>
+                            {loading ? "Creating Account..." : "Create Account"}
+                          </Button>
+                        </form>
+                      )}
+
                       <div className="mt-6 text-center">
                         <div className="flex justify-center space-x-6 text-sm">
                           <a href="https://elearning.zetech.ac.ke/login/forgot_password.php" target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-gray-800">Forgot Password?</a>
