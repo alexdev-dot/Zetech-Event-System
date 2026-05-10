@@ -13,7 +13,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: (adminNumber: string, password: string) => Promise<void>;
   signUp: (firstName: string, lastName: string, admissionNumber: string, campus: string, password: string) => Promise<void>;
-  createStudentAccount: (firstName: string, lastName: string, admissionNumber: string, password: string) => Promise<void>;
+  createStudentAccount: (firstName: string, lastName: string, email: string, admissionNumber: string, password: string) => Promise<void>;
   signOut: () => void;
   updateProfile: (profileData: any) => Promise<void>;
   adminSignIn: (email: string, password: string) => Promise<void>;
@@ -26,7 +26,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: false,
   signIn: async (adminNumber: string, password: string) => {},
   signUp: async (firstName: string, lastName: string, admissionNumber: string, campus: string, password: string) => {},
-  createStudentAccount: async (firstName: string, lastName: string, admissionNumber: string, password: string) => {},
+  createStudentAccount: async (firstName: string, lastName: string, email: string, admissionNumber: string, password: string) => {},
   signOut: () => {},
   updateProfile: async () => {},
   adminSignIn: async (email: string, password: string) => {},
@@ -172,7 +172,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const createStudentAccount = async (firstName: string, lastName: string, admissionNumber: string, password: string) => {
+  const createStudentAccount = async (firstName: string, lastName: string, email: string, admissionNumber: string, password: string) => {
     setLoading(true);
     try {
       // Check if admission number already exists
@@ -181,11 +181,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error('This admission number is already registered');
       }
 
+      // Check if email already exists
+      if (existingUsers.some((u: any) => u.email === email)) {
+        throw new Error('This email address is already registered');
+      }
+
       // Create new student account with flexible admission number validation
       // Any admission number format is accepted - no strict validation
       const user: User = {
         id: Date.now().toString(),
-        email: `${admissionNumber.toLowerCase()}@zetech.ac.ke`,
+        email: email,
         adminNumber: admissionNumber,
         name: `${firstName} ${lastName}`,
         role: 'user'

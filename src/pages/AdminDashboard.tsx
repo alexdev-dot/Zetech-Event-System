@@ -2,11 +2,23 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { events as eventsData, categories, allSubCategories, campuses, type Event } from "@/data/events";
 import zetechLogo from "@/assets/zetech-logo.png";
 import SettingsComponent from "@/components/Settings";
+import StudentManagement from "@/components/StudentManagement";
 import { 
   Users, 
   Calendar, 
@@ -57,6 +69,14 @@ import {
   Info,
   HelpCircle,
   FileText,
+  Search,
+  Filter,
+  Phone,
+  BookOpen,
+  Award,
+  XCircle,
+  Upload,
+  MoreHorizontal,
   Palette,
   Volume2,
   Wifi,
@@ -550,9 +570,14 @@ const AdminDashboard = () => {
                   </span>
                 )}
               </button>
-              <button className="text-white/90 hover:text-white hover:bg-white/10 transition-all duration-300 flex items-center px-4 py-2 rounded-lg font-medium">
+              <button 
+                onClick={() => setActiveSection("students")}
+                className={`text-white/90 hover:text-white hover:bg-white/10 transition-all duration-300 flex items-center px-4 py-2 rounded-lg font-medium ${
+                  activeSection === "students" ? "bg-white/20 text-white shadow-lg" : ""
+                }`}
+              >
                 <Users className="mr-2 h-4 w-4" />
-                Users
+                Students
               </button>
               <button className="text-white/90 hover:text-white hover:bg-white/10 transition-all duration-300 flex items-center px-4 py-2 rounded-lg font-medium">
                 <BarChart3 className="mr-2 h-4 w-4" />
@@ -729,13 +754,30 @@ const AdminDashboard = () => {
               </div>
             </button>
 
-            <button className="w-full flex items-center justify-between px-4 py-4 rounded-xl text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 hover:text-blue-700 hover:shadow-md transition-all duration-300 transform hover:scale-[1.02]">
+            <button
+              onClick={() => {
+                setActiveSection("students");
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-4 py-4 rounded-xl transition-all duration-300 transform hover:scale-[1.02] ${
+                activeSection === "students"
+                  ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg"
+                  : "text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 hover:text-blue-700 hover:shadow-md"
+              }`}
+            >
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Users className="h-5 w-5 text-blue-600" />
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  activeSection === "students" ? "bg-white/20" : "bg-blue-100"
+                }`}>
+                  <Users className={`h-5 w-5 ${
+                    activeSection === "students" ? "text-white" : "text-blue-600"
+                  }`} />
                 </div>
-                <span className="font-semibold">Users</span>
+                <span className="font-semibold">Students</span>
               </div>
+              {activeSection === "students" && (
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+              )}
             </button>
 
             <button className="w-full flex items-center justify-between px-4 py-4 rounded-xl text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 hover:text-blue-700 hover:shadow-md transition-all duration-300 transform hover:scale-[1.02]">
@@ -1347,6 +1389,8 @@ const AdminDashboard = () => {
               )}
             </div>
           </div>
+        ) : activeSection === "students" ? (
+          <StudentManagement />
         ) : activeSection === "settings" ? (
           <SettingsComponent
             settings={settings}
