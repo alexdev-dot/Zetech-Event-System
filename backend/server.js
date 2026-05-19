@@ -29,7 +29,6 @@ function invalidateCache(...keys) {
 
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
 
-/** Verifies JWT and attaches decoded payload to req.authUser */
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -42,7 +41,6 @@ function authenticateToken(req, res, next) {
   }
 }
 
-/** Only full admins */
 function requireAdmin(req, res, next) {
   authenticateToken(req, res, () => {
     if (req.authUser?.role !== "admin") {
@@ -52,7 +50,6 @@ function requireAdmin(req, res, next) {
   });
 }
 
-/** Admins OR club leaders */
 function requireAdminOrLeader(req, res, next) {
   authenticateToken(req, res, () => {
     if (req.authUser?.role !== "admin" && req.authUser?.role !== "club_leader") {
@@ -68,8 +65,8 @@ app.get("/api/health", async (_req, res) => {
   try {
     await testConnection();
     res.json({ status: "ok", database: "connected" });
-  } catch {
-    res.status(500).json({ message: "Database connection failed" });
+  } catch (err) {
+    res.status(500).json({ message: "Database connection failed", detail: err.message });
   }
 });
 
@@ -99,8 +96,8 @@ app.post("/api/auth/register", async (req, res) => {
   }
 
   try {
-    const [existing] = await pool.execute(
-      "SELECT id FROM student_registrations WHERE admission_number = ? OR email = ? LIMIT 1",
+    const { rows: existing } = await pool.query(
+      "SELECT id FROM student_registrations WHERE admission_number = $1 OR email = $2 LIMIT 1",
       [admissionNumber.trim(), email.trim().toLowerCase()]
     );
     if (existing.length > 0) {
@@ -108,21 +105,20 @@ app.post("/api/auth/register", async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
-    const [result] = await pool.execute(
+    const { rows: result } = await pool.query(
       `INSERT INTO student_registrations (first_name, last_name, admission_number, email, password)
-       VALUES (?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
       [firstName.trim(), lastName.trim(), admissionNumber.trim(), email.trim().toLowerCase(), hashedPassword]
     );
 
     const user = {
-      id: result.insertId,
+      id: result[0].id,
       email: email.trim().toLowerCase(),
       adminNumber: admissionNumber.trim(),
       name: `${firstName.trim()} ${lastName.trim()}`,
       role: "user",
     };
     const token = generateToken({ id: user.id, role: "user" });
-
     res.status(201).json({ message: "Student registered successfully", user, token });
   } catch (error) {
     console.error("Register error:", error);
@@ -141,9 +137,9 @@ app.post("/api/auth/login", async (req, res) => {
   }
 
   try {
-    const [students] = await pool.execute(
+    const { rows: students } = await pool.query(
       `SELECT id, first_name, last_name, admission_number, email, password, status
-       FROM student_registrations WHERE admission_number = ? LIMIT 1`,
+       FROM student_registrations WHERE admission_number = $1 LIMIT 1`,
       [admissionNumber.trim()]
     );
     if (students.length === 0) {
@@ -160,7 +156,7 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid admission number or password" });
     }
 
-    await pool.execute("UPDATE student_registrations SET last_login = NOW() WHERE id = ?", [student.id]);
+    await pool.query("UPDATE student_registrations SET last_login = NOW() WHERE id = $1", [student.id]);
 
     const user = {
       id: student.id,
@@ -170,7 +166,6 @@ app.post("/api/auth/login", async (req, res) => {
       role: "user",
     };
     const token = generateToken({ id: student.id, role: "user" });
-
     res.json({ message: "Login successful", user, token });
   } catch (error) {
     console.error("Login error:", error);
@@ -178,7 +173,7 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// ─── ADMIN / CLUB LEADER AUTH ────────────────────────────────────────────────
+// ─── ADMIN / CLUB LEADER AUTH ─────────────────────────────────────────────────
 
 app.post("/api/auth/admin/login", async (req, res) => {
   const { email, password } = req.body;
@@ -191,8 +186,8 @@ app.post("/api/auth/admin/login", async (req, res) => {
   }
 
   try {
-    const [admins] = await pool.execute(
-      "SELECT id, email, password, role, name, club FROM admins WHERE email = ? LIMIT 1",
+    const { rows: admins } = await pool.query(
+      "SELECT id, email, password, role, name, club FROM admins WHERE email = $1 LIMIT 1",
       [email.trim().toLowerCase()]
     );
     if (admins.length === 0) {
@@ -201,7 +196,6 @@ app.post("/api/auth/admin/login", async (req, res) => {
 
     const admin = admins[0];
 
-    // Support legacy plain-text password (first-run upgrade)
     let isPasswordValid = false;
     if (admin.password === "admin123") {
       isPasswordValid = password === "admin123";
@@ -215,7 +209,7 @@ app.post("/api/auth/admin/login", async (req, res) => {
     // Upgrade plain-text password on first login
     if (admin.password === "admin123") {
       const hashedPassword = await bcrypt.hash(password, 12);
-      await pool.execute("UPDATE admins SET password = ? WHERE id = ?", [hashedPassword, admin.id]);
+      await pool.query("UPDATE admins SET password = $1 WHERE id = $2", [hashedPassword, admin.id]);
     }
 
     const role = admin.role || "admin";
@@ -228,7 +222,6 @@ app.post("/api/auth/admin/login", async (req, res) => {
       club: admin.club || null,
     };
     const token = generateToken({ id: admin.id, role, club: admin.club || null });
-
     res.json({ message: "Login successful", user, token });
   } catch (error) {
     console.error("Admin login error:", error);
@@ -236,13 +229,13 @@ app.post("/api/auth/admin/login", async (req, res) => {
   }
 });
 
-// Verify token endpoint (for session restore)
+// Session restore
 app.get("/api/auth/me", authenticateToken, async (req, res) => {
   try {
     const { id, role } = req.authUser;
     if (role === "user") {
-      const [rows] = await pool.execute(
-        "SELECT id, first_name, last_name, admission_number, email, status FROM student_registrations WHERE id = ? LIMIT 1",
+      const { rows } = await pool.query(
+        "SELECT id, first_name, last_name, admission_number, email, status FROM student_registrations WHERE id = $1 LIMIT 1",
         [id]
       );
       if (!rows.length || rows[0].status === "deleted") {
@@ -258,8 +251,8 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
         },
       });
     } else {
-      const [rows] = await pool.execute(
-        "SELECT id, email, role, name, club FROM admins WHERE id = ? LIMIT 1",
+      const { rows } = await pool.query(
+        "SELECT id, email, role, name, club FROM admins WHERE id = $1 LIMIT 1",
         [id]
       );
       if (!rows.length) return res.status(401).json({ message: "Account not found" });
@@ -288,18 +281,18 @@ app.get("/api/events", async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    const [events] = await pool.execute(`
+    const { rows: events } = await pool.query(`
       SELECT e.*,
-             COUNT(er.id) AS registered_count,
-             a.email AS created_by_email,
-             a.name AS created_by_name,
-             a.role AS creator_role,
-             a.club AS creator_club
+             COUNT(er.id)::int AS registered_count,
+             a.email            AS created_by_email,
+             a.name             AS created_by_name,
+             a.role             AS creator_role,
+             a.club             AS creator_club
       FROM events e
       LEFT JOIN event_registrations er ON e.id = er.event_id AND er.status = 'registered'
       LEFT JOIN admins a ON e.created_by = a.id
       WHERE e.status != 'cancelled'
-      GROUP BY e.id
+      GROUP BY e.id, a.email, a.name, a.role, a.club
       ORDER BY e.date ASC, e.time ASC
     `);
     cache.set(cacheKey, events);
@@ -319,16 +312,16 @@ app.get("/api/events/:id", async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    const [events] = await pool.execute(`
+    const { rows: events } = await pool.query(`
       SELECT e.*,
-             COUNT(er.id) AS registered_count,
-             a.email AS created_by_email,
-             a.name AS created_by_name
+             COUNT(er.id)::int AS registered_count,
+             a.email            AS created_by_email,
+             a.name             AS created_by_name
       FROM events e
       LEFT JOIN event_registrations er ON e.id = er.event_id AND er.status = 'registered'
       LEFT JOIN admins a ON e.created_by = a.id
-      WHERE e.id = ?
-      GROUP BY e.id
+      WHERE e.id = $1
+      GROUP BY e.id, a.email, a.name
     `, [id]);
 
     if (events.length === 0) return res.status(404).json({ message: "Event not found" });
@@ -340,7 +333,6 @@ app.get("/api/events/:id", async (req, res) => {
   }
 });
 
-// Create event — admin or club leader
 app.post("/api/events", requireAdminOrLeader, async (req, res) => {
   const { title, description, date, time, location, category, maxParticipants, imageUrl } = req.body;
 
@@ -361,7 +353,6 @@ app.post("/api/events", requireAdminOrLeader, async (req, res) => {
     if (isNaN(cap) || cap < 1) return res.status(400).json({ message: "maxParticipants must be a positive number" });
   }
 
-  // Club leaders can only create events for their own club category
   if (req.authUser.role === "club_leader" && req.authUser.club) {
     if (category !== req.authUser.club) {
       return res.status(403).json({ message: `Club leaders can only create events for their club: ${req.authUser.club}` });
@@ -370,21 +361,21 @@ app.post("/api/events", requireAdminOrLeader, async (req, res) => {
 
   try {
     const createdBy = req.authUser.id;
-    const [result] = await pool.execute(
+    const { rows } = await pool.query(
       `INSERT INTO events (title, description, date, time, location, category, max_participants, image_url, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [title.trim(), description.trim(), date, time, location.trim(), category, maxParticipants || null, imageUrl || null, createdBy]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [title.trim(), description.trim(), date, time, location.trim(), category,
+       maxParticipants || null, imageUrl || null, createdBy]
     );
 
     invalidateCache("events:all", "admin:stats");
-    res.status(201).json({ message: "Event created successfully", eventId: result.insertId });
+    res.status(201).json({ message: "Event created successfully", eventId: rows[0].id });
   } catch (error) {
     console.error("Create event error:", error);
     res.status(500).json({ message: "Failed to create event" });
   }
 });
 
-// Update event — admin only (or club leader's own events)
 app.put("/api/events/:id", requireAdminOrLeader, async (req, res) => {
   const { id } = req.params;
   if (isNaN(parseInt(id))) return res.status(400).json({ message: "Invalid event ID" });
@@ -396,9 +387,8 @@ app.put("/api/events/:id", requireAdminOrLeader, async (req, res) => {
   }
 
   try {
-    // Club leaders can only edit their own events
     if (req.authUser.role === "club_leader") {
-      const [rows] = await pool.execute("SELECT created_by FROM events WHERE id = ?", [id]);
+      const { rows } = await pool.query("SELECT created_by FROM events WHERE id = $1", [id]);
       if (!rows.length) return res.status(404).json({ message: "Event not found" });
       if (rows[0].created_by !== req.authUser.id) {
         return res.status(403).json({ message: "You can only edit your own events" });
@@ -408,15 +398,16 @@ app.put("/api/events/:id", requireAdminOrLeader, async (req, res) => {
     const validStatuses = ["upcoming", "ongoing", "completed", "cancelled"];
     const safeStatus = validStatuses.includes(status) ? status : "upcoming";
 
-    const [result] = await pool.execute(
+    const { rowCount } = await pool.query(
       `UPDATE events
-       SET title = ?, description = ?, date = ?, time = ?, location = ?,
-           category = ?, max_participants = ?, image_url = ?, status = ?
-       WHERE id = ?`,
-      [title.trim(), description.trim(), date, time, location.trim(), category, maxParticipants || null, imageUrl || null, safeStatus, id]
+       SET title = $1, description = $2, date = $3, time = $4, location = $5,
+           category = $6, max_participants = $7, image_url = $8, status = $9
+       WHERE id = $10`,
+      [title.trim(), description.trim(), date, time, location.trim(), category,
+       maxParticipants || null, imageUrl || null, safeStatus, id]
     );
 
-    if (result.affectedRows === 0) return res.status(404).json({ message: "Event not found" });
+    if (rowCount === 0) return res.status(404).json({ message: "Event not found" });
     invalidateCache("events:all", `event:${id}`, "admin:stats");
     res.json({ message: "Event updated successfully" });
   } catch (error) {
@@ -425,14 +416,13 @@ app.put("/api/events/:id", requireAdminOrLeader, async (req, res) => {
   }
 });
 
-// Delete event — admin only
 app.delete("/api/events/:id", requireAdmin, async (req, res) => {
   const { id } = req.params;
   if (isNaN(parseInt(id))) return res.status(400).json({ message: "Invalid event ID" });
 
   try {
-    const [result] = await pool.execute("DELETE FROM events WHERE id = ?", [id]);
-    if (result.affectedRows === 0) return res.status(404).json({ message: "Event not found" });
+    const { rowCount } = await pool.query("DELETE FROM events WHERE id = $1", [id]);
+    if (rowCount === 0) return res.status(404).json({ message: "Event not found" });
     invalidateCache("events:all", `event:${id}`, "admin:stats");
     res.json({ message: "Event deleted successfully" });
   } catch (error) {
@@ -446,7 +436,6 @@ app.delete("/api/events/:id", requireAdmin, async (req, res) => {
 app.post("/api/events/:id/register", authenticateToken, async (req, res) => {
   const { id } = req.params;
   if (isNaN(parseInt(id))) return res.status(400).json({ message: "Invalid event ID" });
-
   if (req.authUser.role !== "user") {
     return res.status(403).json({ message: "Only students can register for events" });
   }
@@ -454,8 +443,8 @@ app.post("/api/events/:id/register", authenticateToken, async (req, res) => {
   const studentId = req.authUser.id;
 
   try {
-    const [events] = await pool.execute(
-      "SELECT id, max_participants, status FROM events WHERE id = ? AND status = 'upcoming' LIMIT 1",
+    const { rows: events } = await pool.query(
+      "SELECT id, max_participants, status FROM events WHERE id = $1 AND status = 'upcoming' LIMIT 1",
       [id]
     );
     if (events.length === 0) {
@@ -464,8 +453,8 @@ app.post("/api/events/:id/register", authenticateToken, async (req, res) => {
 
     const event = events[0];
 
-    const [existing] = await pool.execute(
-      "SELECT id FROM event_registrations WHERE event_id = ? AND student_id = ?",
+    const { rows: existing } = await pool.query(
+      "SELECT id FROM event_registrations WHERE event_id = $1 AND student_id = $2",
       [id, studentId]
     );
     if (existing.length > 0) {
@@ -473,8 +462,8 @@ app.post("/api/events/:id/register", authenticateToken, async (req, res) => {
     }
 
     if (event.max_participants) {
-      const [countRows] = await pool.execute(
-        "SELECT COUNT(*) AS count FROM event_registrations WHERE event_id = ? AND status = 'registered'",
+      const { rows: countRows } = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM event_registrations WHERE event_id = $1 AND status = 'registered'",
         [id]
       );
       if (countRows[0].count >= event.max_participants) {
@@ -482,13 +471,13 @@ app.post("/api/events/:id/register", authenticateToken, async (req, res) => {
       }
     }
 
-    const [result] = await pool.execute(
-      "INSERT INTO event_registrations (event_id, student_id) VALUES (?, ?)",
+    const { rows: reg } = await pool.query(
+      "INSERT INTO event_registrations (event_id, student_id) VALUES ($1, $2) RETURNING id",
       [id, studentId]
     );
 
     invalidateCache("events:all", `event:${id}`);
-    res.status(201).json({ message: "Successfully registered for event", registrationId: result.insertId });
+    res.status(201).json({ message: "Successfully registered for event", registrationId: reg[0].id });
   } catch (error) {
     console.error("Register event error:", error);
     res.status(500).json({ message: "Failed to register for event" });
@@ -500,18 +489,16 @@ app.delete("/api/events/:eventId/register/:studentId", authenticateToken, async 
   if (isNaN(parseInt(eventId)) || isNaN(parseInt(studentId))) {
     return res.status(400).json({ message: "Invalid IDs" });
   }
-
-  // Students can only cancel their own registration
   if (req.authUser.role === "user" && req.authUser.id !== parseInt(studentId)) {
     return res.status(403).json({ message: "You can only cancel your own registration" });
   }
 
   try {
-    const [result] = await pool.execute(
-      "DELETE FROM event_registrations WHERE event_id = ? AND student_id = ?",
+    const { rowCount } = await pool.query(
+      "DELETE FROM event_registrations WHERE event_id = $1 AND student_id = $2",
       [eventId, studentId]
     );
-    if (result.affectedRows === 0) return res.status(404).json({ message: "Registration not found" });
+    if (rowCount === 0) return res.status(404).json({ message: "Registration not found" });
     invalidateCache("events:all", `event:${eventId}`);
     res.json({ message: "Registration cancelled successfully" });
   } catch (error) {
@@ -523,18 +510,17 @@ app.delete("/api/events/:eventId/register/:studentId", authenticateToken, async 
 app.get("/api/students/:studentId/registrations", authenticateToken, async (req, res) => {
   const { studentId } = req.params;
   if (isNaN(parseInt(studentId))) return res.status(400).json({ message: "Invalid student ID" });
-
-  // Students can only view their own registrations
   if (req.authUser.role === "user" && req.authUser.id !== parseInt(studentId)) {
     return res.status(403).json({ message: "Access denied" });
   }
 
   try {
-    const [registrations] = await pool.execute(`
-      SELECT er.*, e.title, e.date, e.time, e.location, e.category, e.status AS event_status, e.image_url
+    const { rows: registrations } = await pool.query(`
+      SELECT er.*, e.title, e.date, e.time, e.location, e.category,
+             e.status AS event_status, e.image_url
       FROM event_registrations er
       JOIN events e ON er.event_id = e.id
-      WHERE er.student_id = ?
+      WHERE er.student_id = $1
       ORDER BY e.date ASC, e.time ASC
     `, [studentId]);
 
@@ -553,13 +539,13 @@ app.get("/api/admin/dashboard/stats", requireAdmin, async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    const [[{ count: totalEvents }]] = await pool.execute("SELECT COUNT(*) AS count FROM events");
-    const [[{ count: totalStudents }]] = await pool.execute("SELECT COUNT(*) AS count FROM student_registrations WHERE status = 'active'");
-    const [[{ count: upcomingEvents }]] = await pool.execute("SELECT COUNT(*) AS count FROM events WHERE status = 'upcoming'");
-    const [[{ count: totalRegistrations }]] = await pool.execute("SELECT COUNT(*) AS count FROM event_registrations WHERE status = 'registered'");
+    const { rows: [{ count: totalEvents }] }        = await pool.query("SELECT COUNT(*)::int AS count FROM events");
+    const { rows: [{ count: totalStudents }] }      = await pool.query("SELECT COUNT(*)::int AS count FROM student_registrations WHERE status = 'active'");
+    const { rows: [{ count: upcomingEvents }] }     = await pool.query("SELECT COUNT(*)::int AS count FROM events WHERE status = 'upcoming'");
+    const { rows: [{ count: totalRegistrations }] } = await pool.query("SELECT COUNT(*)::int AS count FROM event_registrations WHERE status = 'registered'");
 
-    const [recentEvents] = await pool.execute(`
-      SELECT e.*, COUNT(er.id) AS registered_count
+    const { rows: recentEvents } = await pool.query(`
+      SELECT e.*, COUNT(er.id)::int AS registered_count
       FROM events e
       LEFT JOIN event_registrations er ON e.id = er.event_id AND er.status = 'registered'
       GROUP BY e.id
@@ -581,11 +567,11 @@ app.get("/api/admin/events/:eventId/registrations", requireAdmin, async (req, re
   if (isNaN(parseInt(eventId))) return res.status(400).json({ message: "Invalid event ID" });
 
   try {
-    const [registrations] = await pool.execute(`
+    const { rows: registrations } = await pool.query(`
       SELECT er.*, sr.first_name, sr.last_name, sr.admission_number, sr.email
       FROM event_registrations er
       JOIN student_registrations sr ON er.student_id = sr.id
-      WHERE er.event_id = ?
+      WHERE er.event_id = $1
       ORDER BY er.registration_date ASC
     `, [eventId]);
     res.json(registrations);
@@ -597,7 +583,7 @@ app.get("/api/admin/events/:eventId/registrations", requireAdmin, async (req, re
 
 app.get("/api/admin/students", requireAdmin, async (req, res) => {
   try {
-    const [students] = await pool.execute(`
+    const { rows: students } = await pool.query(`
       SELECT id, first_name, last_name, admission_number, email, status, created_at, last_login
       FROM student_registrations
       ORDER BY created_at DESC
@@ -614,8 +600,8 @@ app.delete("/api/admin/students/:studentId", requireAdmin, async (req, res) => {
   if (isNaN(parseInt(studentId))) return res.status(400).json({ message: "Invalid student ID" });
 
   try {
-    const [result] = await pool.execute("DELETE FROM student_registrations WHERE id = ?", [studentId]);
-    if (result.affectedRows === 0) return res.status(404).json({ message: "Student not found" });
+    const { rowCount } = await pool.query("DELETE FROM student_registrations WHERE id = $1", [studentId]);
+    if (rowCount === 0) return res.status(404).json({ message: "Student not found" });
     res.json({ message: "Student deleted successfully" });
   } catch (error) {
     console.error("Delete student error:", error);
@@ -625,17 +611,10 @@ app.delete("/api/admin/students/:studentId", requireAdmin, async (req, res) => {
 
 app.get("/api/admin/activity", requireAdmin, async (req, res) => {
   try {
-    const [[{ count: activeStudents }]] = await pool.execute(
-      "SELECT COUNT(*) AS count FROM student_registrations WHERE status = 'active'"
-    );
-    const [[{ count: totalStudents }]] = await pool.execute(
-      "SELECT COUNT(*) AS count FROM student_registrations"
-    );
-    const [[{ count: totalEvents }]] = await pool.execute("SELECT COUNT(*) AS count FROM events");
-    const [[{ count: upcomingEvents }]] = await pool.execute("SELECT COUNT(*) AS count FROM events WHERE status = 'upcoming'");
-    const [[{ count: totalEventRegistrations }]] = await pool.execute(
-      "SELECT COUNT(*) AS count FROM event_registrations WHERE status = 'registered'"
-    );
+    const { rows: [{ count: activeStudents }] }          = await pool.query("SELECT COUNT(*)::int AS count FROM student_registrations WHERE status = 'active'");
+    const { rows: [{ count: totalEvents }] }             = await pool.query("SELECT COUNT(*)::int AS count FROM events");
+    const { rows: [{ count: upcomingEvents }] }          = await pool.query("SELECT COUNT(*)::int AS count FROM events WHERE status = 'upcoming'");
+    const { rows: [{ count: totalEventRegistrations }] } = await pool.query("SELECT COUNT(*)::int AS count FROM event_registrations WHERE status = 'registered'");
 
     const activeSessions = Math.max(1, Math.floor(activeStudents * 0.2));
 
@@ -656,13 +635,13 @@ app.get("/api/admin/activity", requireAdmin, async (req, res) => {
 
 app.get("/api/admin/recent-registrations", requireAdmin, async (req, res) => {
   const limitParam = parseInt(req.query.limit) || 10;
-  const limit = Math.min(Math.max(1, limitParam), 100); // clamp 1–100
+  const limit = Math.min(Math.max(1, limitParam), 100);
 
   try {
-    const [rows] = await pool.execute(
+    const { rows } = await pool.query(
       `SELECT id, first_name, last_name, admission_number, email, created_at
        FROM student_registrations WHERE status = 'active'
-       ORDER BY id DESC LIMIT ?`,
+       ORDER BY id DESC LIMIT $1`,
       [limit]
     );
     res.json(rows);
@@ -683,12 +662,12 @@ app.get("/api/admin/active-sessions", requireAdmin, async (req, res) => {
                COALESCE(last_login, created_at) AS session_start,
                last_login, created_at,
                CASE
-                 WHEN last_login IS NOT NULL AND TIMESTAMPDIFF(MINUTE, last_login, NOW()) <= 30 THEN 'active'
+                 WHEN last_login IS NOT NULL AND EXTRACT(EPOCH FROM (NOW() - last_login))/60 <= 30 THEN 'active'
                  WHEN last_login IS NOT NULL THEN 'inactive'
                  ELSE 'never_logged_in'
                END AS login_status
         FROM student_registrations WHERE status = 'active'
-        ORDER BY CASE WHEN last_login IS NOT NULL THEN last_login ELSE created_at END DESC
+        ORDER BY COALESCE(last_login, created_at) DESC
         LIMIT 20
       `;
     } else {
@@ -698,13 +677,13 @@ app.get("/api/admin/active-sessions", requireAdmin, async (req, res) => {
                last_login, created_at, 'active' AS login_status
         FROM student_registrations
         WHERE status = 'active' AND last_login IS NOT NULL
-          AND TIMESTAMPDIFF(MINUTE, last_login, NOW()) <= 30
+          AND EXTRACT(EPOCH FROM (NOW() - last_login))/60 <= 30
         ORDER BY last_login DESC
         LIMIT 10
       `;
     }
 
-    const [users] = await pool.execute(query);
+    const { rows: users } = await pool.query(query);
     res.json(users);
   } catch (error) {
     console.error("Active sessions error:", error);
@@ -730,7 +709,7 @@ app.put("/api/admin/account", requireAdmin, async (req, res) => {
 
   try {
     const adminId = req.authUser.id;
-    const [admins] = await pool.execute("SELECT id, email, password FROM admins WHERE id = ?", [adminId]);
+    const { rows: admins } = await pool.query("SELECT id, email, password FROM admins WHERE id = $1", [adminId]);
     if (admins.length === 0) return res.status(404).json({ message: "Admin account not found" });
 
     const admin = admins[0];
@@ -738,8 +717,8 @@ app.put("/api/admin/account", requireAdmin, async (req, res) => {
     if (!isPasswordValid) return res.status(401).json({ message: "Current password is incorrect" });
 
     if (newEmail && newEmail !== admin.email) {
-      const [existingEmail] = await pool.execute(
-        "SELECT id FROM admins WHERE email = ? AND id != ?",
+      const { rows: existingEmail } = await pool.query(
+        "SELECT id FROM admins WHERE email = $1 AND id != $2",
         [newEmail.trim().toLowerCase(), admin.id]
       );
       if (existingEmail.length > 0) return res.status(409).json({ message: "Email is already in use" });
@@ -747,14 +726,14 @@ app.put("/api/admin/account", requireAdmin, async (req, res) => {
 
     const updateFields = [];
     const updateValues = [];
-    if (newEmail) { updateFields.push("email = ?"); updateValues.push(newEmail.trim().toLowerCase()); }
+    if (newEmail) { updateFields.push(`email = $${updateValues.push(newEmail.trim().toLowerCase())}`); }
     if (newPassword) {
       const hashed = await bcrypt.hash(newPassword, 12);
-      updateFields.push("password = ?");
-      updateValues.push(hashed);
+      updateFields.push(`password = $${updateValues.push(hashed)}`);
     }
+    updateValues.push(admin.id);
 
-    await pool.execute(`UPDATE admins SET ${updateFields.join(", ")} WHERE id = ?`, [...updateValues, admin.id]);
+    await pool.query(`UPDATE admins SET ${updateFields.join(", ")} WHERE id = $${updateValues.length}`, updateValues);
     res.json({ message: "Account updated successfully" });
   } catch (error) {
     console.error("Update account error:", error);
@@ -766,7 +745,7 @@ app.put("/api/admin/account", requireAdmin, async (req, res) => {
 
 app.get("/api/admin/club-leaders", requireAdmin, async (req, res) => {
   try {
-    const [leaders] = await pool.execute(
+    const { rows: leaders } = await pool.query(
       "SELECT id, email, name, club, created_at FROM admins WHERE role = 'club_leader' ORDER BY created_at DESC"
     );
     res.json(leaders);
@@ -789,18 +768,18 @@ app.post("/api/admin/club-leaders", requireAdmin, async (req, res) => {
   }
 
   try {
-    const [existing] = await pool.execute("SELECT id FROM admins WHERE email = ?", [email.trim().toLowerCase()]);
+    const { rows: existing } = await pool.query("SELECT id FROM admins WHERE email = $1", [email.trim().toLowerCase()]);
     if (existing.length > 0) return res.status(409).json({ message: "Email already registered" });
 
     const hashedPassword = await bcrypt.hash(password, 12);
-    const [result] = await pool.execute(
-      "INSERT INTO admins (email, password, name, club, role) VALUES (?, ?, ?, ?, 'club_leader')",
+    const { rows } = await pool.query(
+      "INSERT INTO admins (email, password, name, club, role) VALUES ($1, $2, $3, $4, 'club_leader') RETURNING id",
       [email.trim().toLowerCase(), hashedPassword, name.trim(), club.trim()]
     );
 
     res.status(201).json({
       message: "Club leader created successfully",
-      leader: { id: result.insertId, email: email.trim().toLowerCase(), name: name.trim(), club: club.trim() },
+      leader: { id: rows[0].id, email: email.trim().toLowerCase(), name: name.trim(), club: club.trim() },
     });
   } catch (error) {
     console.error("Create club leader error:", error);
@@ -813,8 +792,8 @@ app.delete("/api/admin/club-leaders/:id", requireAdmin, async (req, res) => {
   if (isNaN(parseInt(id))) return res.status(400).json({ message: "Invalid ID" });
 
   try {
-    const [result] = await pool.execute("DELETE FROM admins WHERE id = ? AND role = 'club_leader'", [id]);
-    if (result.affectedRows === 0) return res.status(404).json({ message: "Club leader not found" });
+    const { rowCount } = await pool.query("DELETE FROM admins WHERE id = $1 AND role = 'club_leader'", [id]);
+    if (rowCount === 0) return res.status(404).json({ message: "Club leader not found" });
     res.json({ message: "Club leader deleted successfully" });
   } catch (error) {
     console.error("Delete club leader error:", error);
@@ -834,28 +813,26 @@ app.get("/api/club-leader/dashboard", requireAdminOrLeader, async (req, res) => 
   if (cached) return res.json(cached);
 
   try {
-    const club = req.authUser.club;
     const leaderId = req.authUser.id;
+    const club = req.authUser.club;
 
-    const [myEvents] = await pool.execute(`
-      SELECT e.*, COUNT(er.id) AS registered_count
+    const { rows: myEvents } = await pool.query(`
+      SELECT e.*, COUNT(er.id)::int AS registered_count
       FROM events e
       LEFT JOIN event_registrations er ON e.id = er.event_id AND er.status = 'registered'
-      WHERE e.created_by = ?
+      WHERE e.created_by = $1
       GROUP BY e.id
       ORDER BY e.date DESC
     `, [leaderId]);
 
-    const [[{ count: totalMyEvents }]] = await pool.execute(
-      "SELECT COUNT(*) AS count FROM events WHERE created_by = ?", [leaderId]
-    );
-    const [[{ count: totalRegistrations }]] = await pool.execute(`
-      SELECT COUNT(*) AS count FROM event_registrations er
+    const { rows: [{ count: totalMyEvents }] }    = await pool.query("SELECT COUNT(*)::int AS count FROM events WHERE created_by = $1", [leaderId]);
+    const { rows: [{ count: totalRegistrations }] } = await pool.query(`
+      SELECT COUNT(*)::int AS count FROM event_registrations er
       JOIN events e ON er.event_id = e.id
-      WHERE e.created_by = ? AND er.status = 'registered'
+      WHERE e.created_by = $1 AND er.status = 'registered'
     `, [leaderId]);
-    const [[{ count: upcomingCount }]] = await pool.execute(
-      "SELECT COUNT(*) AS count FROM events WHERE created_by = ? AND status = 'upcoming'", [leaderId]
+    const { rows: [{ count: upcomingCount }] } = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM events WHERE created_by = $1 AND status = 'upcoming'", [leaderId]
     );
 
     const result = {
@@ -863,7 +840,7 @@ app.get("/api/club-leader/dashboard", requireAdminOrLeader, async (req, res) => 
       stats: { totalMyEvents, totalRegistrations, upcomingCount },
       myEvents,
     };
-    cache.set(cacheKey, result, 30); // 30s cache for leader dashboard
+    cache.set(cacheKey, result, 30);
     res.json(result);
   } catch (error) {
     console.error("Club leader dashboard error:", error);
@@ -871,7 +848,6 @@ app.get("/api/club-leader/dashboard", requireAdminOrLeader, async (req, res) => 
   }
 });
 
-// Club leader update their own account password
 app.put("/api/club-leader/account", requireAdminOrLeader, async (req, res) => {
   if (req.authUser.role !== "club_leader") {
     return res.status(403).json({ message: "Club leader access only" });
@@ -883,14 +859,14 @@ app.put("/api/club-leader/account", requireAdminOrLeader, async (req, res) => {
   if (newPassword.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
 
   try {
-    const [rows] = await pool.execute("SELECT id, password FROM admins WHERE id = ?", [req.authUser.id]);
+    const { rows } = await pool.query("SELECT id, password FROM admins WHERE id = $1", [req.authUser.id]);
     if (!rows.length) return res.status(404).json({ message: "Account not found" });
 
     const isValid = await bcrypt.compare(currentPassword, rows[0].password);
     if (!isValid) return res.status(401).json({ message: "Current password is incorrect" });
 
     const hashed = await bcrypt.hash(newPassword, 12);
-    await pool.execute("UPDATE admins SET password = ? WHERE id = ?", [hashed, req.authUser.id]);
+    await pool.query("UPDATE admins SET password = $1 WHERE id = $2", [hashed, req.authUser.id]);
     res.json({ message: "Password updated successfully" });
   } catch (error) {
     console.error("Club leader account update error:", error);
@@ -904,6 +880,7 @@ app.listen(PORT, async () => {
   try {
     await testConnection();
     console.log(`Backend running on http://localhost:${PORT}`);
+    console.log("Database: Supabase PostgreSQL connected");
   } catch (error) {
     console.error("Failed to connect to database:", error.message);
   }

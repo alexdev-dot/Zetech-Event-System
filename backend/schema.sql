@@ -1,64 +1,84 @@
-CREATE DATABASE IF NOT EXISTS zetech_event_system;
+-- ============================================================
+-- Zetech Events Hub — PostgreSQL schema for Supabase
+-- Run this ONCE in the Supabase SQL editor:
+--   https://supabase.com/dashboard/project/druqtjclfqcbzonjyjoi/sql/new
+-- ============================================================
 
-USE zetech_event_system;
+-- ─── TABLES ──────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS student_registrations (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  first_name VARCHAR(100) NOT NULL,
-  last_name VARCHAR(100) NOT NULL,
-  admission_number VARCHAR(50) NOT NULL UNIQUE,
-  email VARCHAR(255) NOT NULL UNIQUE,
-  password VARCHAR(255) NOT NULL,
-  status ENUM('active', 'deleted') DEFAULT 'active',
-  last_login TIMESTAMP NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id               SERIAL PRIMARY KEY,
+  first_name       VARCHAR(100)  NOT NULL,
+  last_name        VARCHAR(100)  NOT NULL,
+  admission_number VARCHAR(50)   NOT NULL UNIQUE,
+  email            VARCHAR(255)  NOT NULL UNIQUE,
+  password         VARCHAR(255)  NOT NULL,
+  status           VARCHAR(20)   NOT NULL DEFAULT 'active'
+                     CHECK (status IN ('active','deleted')),
+  last_login       TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS admins (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  email VARCHAR(255) NOT NULL UNIQUE,
-  password VARCHAR(255) NOT NULL,
-  role ENUM('admin', 'club_leader') DEFAULT 'admin',
-  name VARCHAR(100) NULL,
-  club VARCHAR(100) NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id         SERIAL PRIMARY KEY,
+  email      VARCHAR(255) NOT NULL UNIQUE,
+  password   VARCHAR(255) NOT NULL,
+  role       VARCHAR(20)  NOT NULL DEFAULT 'admin'
+               CHECK (role IN ('admin','club_leader')),
+  name       VARCHAR(100),
+  club       VARCHAR(100),
+  created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS events (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  title VARCHAR(255) NOT NULL,
-  description TEXT NOT NULL,
-  date DATE NOT NULL,
-  time TIME NOT NULL,
-  location VARCHAR(255) NOT NULL,
-  category VARCHAR(100) NOT NULL,
+  id               SERIAL PRIMARY KEY,
+  title            VARCHAR(255) NOT NULL,
+  description      TEXT         NOT NULL,
+  date             DATE         NOT NULL,
+  time             TIME         NOT NULL,
+  location         VARCHAR(255) NOT NULL,
+  category         VARCHAR(100) NOT NULL,
   max_participants INT,
-  image_url VARCHAR(500),
-  status ENUM('upcoming', 'ongoing', 'completed', 'cancelled') DEFAULT 'upcoming',
-  created_by INT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (created_by) REFERENCES admins(id)
+  image_url        VARCHAR(500),
+  status           VARCHAR(20)  NOT NULL DEFAULT 'upcoming'
+                     CHECK (status IN ('upcoming','ongoing','completed','cancelled')),
+  created_by       INT          NOT NULL REFERENCES admins(id),
+  created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS event_registrations (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  event_id INT NOT NULL,
-  student_id INT NOT NULL,
-  registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  status ENUM('registered', 'attended', 'cancelled') DEFAULT 'registered',
-  UNIQUE KEY unique_registration (event_id, student_id),
-  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
-  FOREIGN KEY (student_id) REFERENCES student_registrations(id) ON DELETE CASCADE
+  id                SERIAL PRIMARY KEY,
+  event_id          INT         NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  student_id        INT         NOT NULL REFERENCES student_registrations(id) ON DELETE CASCADE,
+  registration_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  status            VARCHAR(20) NOT NULL DEFAULT 'registered'
+                      CHECK (status IN ('registered','attended','cancelled')),
+  UNIQUE (event_id, student_id)
 );
 
--- Seed default admin (password will be upgraded on first login)
+-- Auto-update updated_at on events
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+$$;
+
+DROP TRIGGER IF EXISTS events_updated_at ON events;
+CREATE TRIGGER events_updated_at
+  BEFORE UPDATE ON events
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ─── DISABLE ROW LEVEL SECURITY ──────────────────────────────
+-- Our Express API handles all auth via JWT. RLS is not needed.
+ALTER TABLE student_registrations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE admins                DISABLE ROW LEVEL SECURITY;
+ALTER TABLE events                DISABLE ROW LEVEL SECURITY;
+ALTER TABLE event_registrations   DISABLE ROW LEVEL SECURITY;
+
+-- ─── SEED DEFAULT ADMIN ───────────────────────────────────────
+-- Password 'admin123' is upgraded to bcrypt on first login.
 INSERT INTO admins (email, password, role, name)
 VALUES ('admin@zetech.ac.ke', 'admin123', 'admin', 'Admin User')
-ON DUPLICATE KEY UPDATE role = VALUES(role), name = COALESCE(admins.name, VALUES(name));
-
--- Migrations for existing databases (safe to run multiple times)
-ALTER TABLE admins ADD COLUMN IF NOT EXISTS role ENUM('admin', 'club_leader') DEFAULT 'admin';
-ALTER TABLE admins ADD COLUMN IF NOT EXISTS name VARCHAR(100) NULL;
-ALTER TABLE admins ADD COLUMN IF NOT EXISTS club VARCHAR(100) NULL;
-ALTER TABLE student_registrations ADD COLUMN IF NOT EXISTS last_login TIMESTAMP NULL;
+ON CONFLICT (email) DO UPDATE
+  SET role = EXCLUDED.role,
+      name = COALESCE(admins.name, EXCLUDED.name);

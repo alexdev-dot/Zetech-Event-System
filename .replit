@@ -30,7 +30,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "bash /home/runner/workspace/backend/start.sh"
+args = "cd backend && node server.js"
 waitForPort = 3001
 
 [[workflows.workflow]]
@@ -48,10 +48,6 @@ outputType = "webview"
 [[ports]]
 localPort = 3001
 externalPort = 3001
-
-[[ports]]
-localPort = 3306
-externalPort = 3002
 
 [[ports]]
 localPort = 5000
