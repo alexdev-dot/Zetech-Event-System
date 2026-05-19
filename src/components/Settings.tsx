@@ -20,6 +20,7 @@ import {
   Zap
 } from "lucide-react";
 import { toast } from "sonner";
+import AdminAccountSettings from "./AdminAccountSettings";
 
 interface SettingsProps {
   settings: any;
@@ -273,6 +274,17 @@ const SettingsComponent = ({
 
         {/* Security Settings */}
         <TabsContent value="security" className="space-y-6">
+          {/* Admin Account Settings */}
+          <AdminAccountSettings 
+            currentAdminEmail={settings.adminEmail}
+            onAdminUpdated={(adminData) => {
+              // Update the admin email in settings if it was changed
+              if (adminData.email !== settings.adminEmail) {
+                onSettingChange("general", "adminEmail", adminData.email);
+              }
+            }}
+          />
+          
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>

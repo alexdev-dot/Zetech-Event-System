@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Calendar, MapPin, Clock, User, ArrowLeft, Send, Upload, X, Image as ImageIcon } from "lucide-react";
 import { categories, allSubCategories, campuses } from "@/data/events";
 import { useAuth } from "@/hooks/useAuth";
+import { api } from "@/lib/api";
 import { toast } from "sonner";
 
 interface EventFormData {
@@ -129,39 +130,28 @@ const CreateEvent = () => {
     setIsSubmitting(true);
 
     try {
-      // Create new event object
-      const newEvent = {
-        id: `user-${Date.now()}`,
+      // Create event data for API
+      const eventData = {
         title: formData.title,
         description: formData.description,
         date: formData.date,
         time: formData.time,
-        venue: formData.venue,
-        campus: formData.campus,
-        posterUrl: formData.flyerUrl,
-        status: "pending" as const, // All user-submitted events start as pending
-        registrations: 0,
-        capacity: parseInt(formData.capacity),
-        organizer: formData.organizer,
+        location: formData.venue, // API uses 'location' instead of 'venue'
         category: formData.category,
-        submittedBy: user?.id,
-        submittedAt: new Date().toISOString()
+        maxParticipants: parseInt(formData.capacity) || undefined,
+        imageUrl: formData.flyerUrl || undefined
       };
 
-      // Get existing user-submitted events
-      const existingEvents = JSON.parse(localStorage.getItem('userSubmittedEvents') || '[]');
-      
-      // Add new event
-      const updatedEvents = [...existingEvents, newEvent];
-      localStorage.setItem('userSubmittedEvents', JSON.stringify(updatedEvents));
+      // Send to API
+      await api.events.create(eventData);
 
-      toast.success("Event submitted successfully! It will appear in the admin dashboard for approval.");
+      toast.success("Event created successfully!");
       
       // Navigate back to events page
       navigate("/events");
     } catch (error) {
-      toast.error("Failed to submit event. Please try again.");
-      console.error("Error submitting event:", error);
+      toast.error("Failed to create event. Please try again.");
+      console.error("Error creating event:", error);
     } finally {
       setIsSubmitting(false);
     }

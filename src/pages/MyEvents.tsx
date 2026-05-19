@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/hooks/useAuth";
-import { events } from "@/data/events";
+import { api } from "@/lib/api";
 import { CalendarCheck, QrCode, ExternalLink, Trash2, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ const MyEvents = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [registrations, setRegistrations] = useState<Registration[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
   const [fetching, setFetching] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
 
@@ -42,36 +43,53 @@ const MyEvents = () => {
 
   useEffect(() => {
     if (!user) return;
-    const fetchRegistrations = async () => {
-      // Mock data fetching - replace with actual logic if needed
-      const registrations = JSON.parse(localStorage.getItem('registrations') || '[]');
-      const userRegistrations = registrations
-        .filter((reg: any) => reg.userId === user.id)
-        .map((reg: any, index: number) => ({
-          id: reg.id || index.toString(),
-          eventId: reg.eventId,
-          qrCode: `QR-${reg.eventId}-${reg.userId}`,
-          attended: false,
-          createdAt: reg.registeredAt || new Date().toISOString()
+    const fetchData = async () => {
+      try {
+        // Fetch registrations
+        const registrationsData = await api.students.getRegistrations(user.id.toString());
+        const transformedRegistrations = registrationsData.map((reg: any, index: number) => ({
+          id: reg.id.toString(),
+          eventId: reg.event_id.toString(),
+          qrCode: `QR-${reg.event_id}-${reg.student_id}`,
+          attended: reg.status === 'attended',
+          createdAt: reg.registration_date
         }));
-      setRegistrations(userRegistrations);
-      setFetching(false);
+        setRegistrations(transformedRegistrations);
+
+        // Fetch all events for the registrations
+        const eventIds = transformedRegistrations.map(reg => reg.eventId);
+        const eventPromises = eventIds.map(eventId => 
+          api.events.getById(eventId).catch(() => null)
+        );
+        const eventsData = await Promise.all(eventPromises);
+        setEvents(eventsData.filter(event => event !== null));
+
+      } catch (error) {
+        console.error("Failed to fetch data:", error);
+        setRegistrations([]);
+        setEvents([]);
+      } finally {
+        setFetching(false);
+      }
     };
-    fetchRegistrations();
+    fetchData();
   }, [user]);
 
   const handleDeleteRegistration = async (registrationId: string) => {
     setDeleting(registrationId);
     try {
-      // Mock deletion - replace with actual logic if needed
-      const registrations = JSON.parse(localStorage.getItem('registrations') || '[]');
-      const updatedRegistrations = registrations.filter((reg: any) => 
-        !(reg.userId === user?.id && reg.eventId === registrations.find((r: any) => r.id === registrationId)?.eventId)
-      );
-      localStorage.setItem('registrations', JSON.stringify(updatedRegistrations));
+      // Find the registration to get event ID
+      const registration = registrations.find(reg => reg.id === registrationId);
+      if (!registration || !user) {
+        throw new Error("Registration not found");
+      }
+
+      // Call API to cancel registration
+      await api.events.cancelRegistration(registration.eventId, user.id);
       
       // Update local state
       setRegistrations(prev => prev.filter(reg => reg.id !== registrationId));
+      setEvents(prev => prev.filter(event => event.id.toString() !== registration.eventId));
     } catch (error) {
       console.error("Error deleting registration:", error);
     } finally {
@@ -110,7 +128,7 @@ const MyEvents = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {registrations.map((reg) => {
-              const event = events.find((e) => e.id === reg.eventId);
+              const event = events.find((e) => e.id.toString() === reg.eventId);
               if (!event) return null;
               return (
                 <Card key={reg.id}>

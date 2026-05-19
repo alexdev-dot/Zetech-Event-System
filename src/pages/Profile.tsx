@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Save, User, Mail, Phone, MapPin, Calendar } from "lucide-react";
 
 const Profile = () => {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -21,6 +21,13 @@ const Profile = () => {
     bio: user?.bio || "",
     joinDate: user?.joinDate || "",
   });
+
+  // Redirect admins to admin dashboard
+  useEffect(() => {
+    if (isAdmin()) {
+      navigate("/admin");
+    }
+  }, [isAdmin, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;

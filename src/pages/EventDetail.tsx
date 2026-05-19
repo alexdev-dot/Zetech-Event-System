@@ -1,6 +1,7 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
-import { events, type Event } from "@/data/events";
+import { type Event } from "@/data/events";
+import { api } from "@/lib/api";
 import { Calendar, MapPin, Users, Clock, ArrowLeft, Share2, Facebook, Twitter, Link2, Mail, CheckCircle, AlertCircle, QrCode, Download, Heart, Eye, Sparkles, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -25,29 +26,50 @@ const EventDetail = () => {
   const [isRegistered, setIsRegistered] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [event, setEvent] = useState<Event | null>(null);
-  const [allEvents, setAllEvents] = useState<Event[]>(events);
+  const [allEvents, setAllEvents] = useState<Event[]>([]);
   const [showQRCode, setShowQRCode] = useState(false);
 
   useEffect(() => {
-    // Load approved events from localStorage (includes static + approved user events)
-    const storedApprovedEvents = localStorage.getItem('approvedEvents');
-    const approvedEvents = storedApprovedEvents ? JSON.parse(storedApprovedEvents) : events;
-    
-    setAllEvents(approvedEvents);
-    
-    // Find the specific event
-    const foundEvent = approvedEvents.find((e) => e.id === id);
-    setEvent(foundEvent || null);
+    // Load event from API
+    const loadEvent = async () => {
+      if (!id) return;
+      
+      try {
+        const eventData = await api.events.getById(id);
+        // Transform API data to match frontend Event interface
+        const transformedEvent = {
+          id: eventData.id.toString(),
+          title: eventData.title,
+          description: eventData.description,
+          date: eventData.date,
+          time: eventData.time,
+          venue: eventData.location,
+          campus: "Main Campus", // Default value, can be updated later
+          posterUrl: eventData.image_url || "",
+          status: eventData.status === "upcoming" ? "approved" as const : "pending" as const,
+          registrations: eventData.registered_count || 0,
+          capacity: eventData.max_participants || 0,
+          organizer: eventData.created_by_email || "Admin",
+          category: eventData.category,
+          featured: false
+        };
+        setEvent(transformedEvent);
+      } catch (error) {
+        console.error("Failed to load event:", error);
+        setEvent(null);
+      }
+    };
+
+    loadEvent();
   }, [id]);
 
   useEffect(() => {
-    if (!user || !id) return;
-    // Mock registration check - replace with actual logic if needed
-    const registrations = JSON.parse(localStorage.getItem('registrations') || '[]');
-    const isEventRegistered = registrations.some((reg: any) => 
-      reg.userId === user.id && reg.eventId === id
-    );
-    setIsRegistered(isEventRegistered);
+    if (!user || !id || user.role !== 'user') return;
+    api.students.getRegistrations(user.id.toString())
+      .then((regs: any[]) => {
+        setIsRegistered(regs.some((r: any) => r.event_id?.toString() === id));
+      })
+      .catch(() => setIsRegistered(false));
   }, [user, id]);
 
   if (!event) {
@@ -131,20 +153,11 @@ const EventDetail = () => {
     }
     setRegistering(true);
     try {
-      // Mock registration - replace with actual logic if needed
-      const registrations = JSON.parse(localStorage.getItem('registrations') || '[]');
-      const newRegistration = {
-        userId: user.id,
-        eventId: event!.id,
-        registeredAt: new Date().toISOString()
-      };
-      registrations.push(newRegistration);
-      localStorage.setItem('registrations', JSON.stringify(registrations));
-      
+      await api.events.register(event!.id);
       setIsRegistered(true);
       toast({
         title: "Registration Successful! ✅",
-        description: `You have been registered for "${event!.title}". View your QR code in My Events.`,
+        description: `You are now registered for "${event!.title}". View your QR code in My Events.`,
       });
     } catch (error: any) {
       toast({ title: "Registration Failed", description: error.message || "Could not register for event", variant: "destructive" });

@@ -2,33 +2,64 @@ import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import HeroSection from "@/components/HeroSection";
 import EventCard from "@/components/EventCard";
-import { events, type Event } from "@/data/events";
+import { type Event } from "@/data/events";
+import { api } from "@/lib/api";
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 const Index = () => {
-  const [allEvents, setAllEvents] = useState<Event[]>(events);
+  const [allEvents, setAllEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
   
   useEffect(() => {
-    // Load events from localStorage or use static events
-    const storedApprovedEvents = localStorage.getItem('approvedEvents');
-    let approvedEvents;
-    
-    if (storedApprovedEvents) {
-      const parsed = JSON.parse(storedApprovedEvents);
-      approvedEvents = parsed.length > 0 ? parsed : events;
-    } else {
-      localStorage.setItem('approvedEvents', JSON.stringify(events));
-      approvedEvents = events;
-    }
-    
-    setAllEvents(approvedEvents);
+    // Load events from API
+    const loadEvents = async () => {
+      try {
+        const eventsData = await api.events.getAll();
+        // Transform API data to match frontend Event interface
+        const transformedEvents = eventsData.map((event: any) => ({
+          id: event.id.toString(),
+          title: event.title,
+          description: event.description,
+          date: event.date,
+          time: event.time,
+          venue: event.location,
+          campus: "Main Campus",
+          posterUrl: event.image_url || "",
+          status: event.status === "upcoming" ? "approved" as const : "pending" as const,
+          registrations: event.registered_count || 0,
+          capacity: event.max_participants || 0,
+          organizer: event.created_by_email || "Admin",
+          category: event.category,
+          featured: false
+        }));
+        setAllEvents(transformedEvents);
+      } catch (error) {
+        console.error("Failed to load events:", error);
+        setAllEvents([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadEvents();
   }, []);
   
   const featuredEvent = allEvents.find((e) => e.featured);
   const upcomingEvents = allEvents.filter((e) => !e.featured).slice(0, 4);
   
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="container py-20 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading events...</p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

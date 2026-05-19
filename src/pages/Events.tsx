@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import EventCard from "@/components/EventCard";
-import { events, categories, allSubCategories, type Event } from "@/data/events";
+import { categories, allSubCategories, type Event } from "@/data/events";
+import { api } from "@/lib/api";
 import { Search, Plus, Filter, Calendar, MapPin, Sparkles, TrendingUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,43 +15,47 @@ const Events = () => {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activeSubCategory, setActiveSubCategory] = useState("All");
-  const [allEvents, setAllEvents] = useState<Event[]>(events);
+  const [allEvents, setAllEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Load all approved events
-    const loadEvents = () => {
+    // Load events from API
+    const loadEvents = async () => {
       setIsLoading(true);
-      // Force refresh localStorage with latest static events
-      localStorage.setItem('approvedEvents', JSON.stringify(events));
-      setAllEvents(events);
-      setTimeout(() => setIsLoading(false), 300); // Simulate loading
+      try {
+        const eventsData = await api.events.getAll();
+        // Transform API data to match frontend Event interface
+        const transformedEvents = eventsData.map((event: any) => ({
+          id: event.id.toString(),
+          title: event.title,
+          description: event.description,
+          date: event.date,
+          time: event.time,
+          venue: event.location,
+          campus: "Main Campus", // Default value, can be updated later
+          posterUrl: event.image_url || "",
+          status: event.status === "upcoming" ? "approved" as const : "pending" as const,
+          registrations: event.registered_count || 0,
+          capacity: event.max_participants || 0,
+          organizer: event.created_by_email || "Admin",
+          category: event.category,
+          featured: false
+        }));
+        setAllEvents(transformedEvents);
+      } catch (error) {
+        console.error("Failed to load events:", error);
+        // Fallback to empty array if API fails
+        setAllEvents([]);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     // Initial load
     loadEvents();
-
-    // Listen for storage changes and custom events
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'approvedEvents') {
-        loadEvents();
-      }
-    };
-
-    const handleCustomEvent = () => {
-      loadEvents();
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('userEventsUpdated', handleCustomEvent);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('userEventsUpdated', handleCustomEvent);
-    };
   }, []);
 
   const filtered = allEvents.filter((e) => {
