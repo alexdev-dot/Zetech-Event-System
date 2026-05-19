@@ -68,8 +68,44 @@ CREATE TRIGGER events_updated_at
   BEFORE UPDATE ON events
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- ─── run_sql RPC — used by the Express backend ───────────────
+-- Executes parameterised SQL sent from the backend via HTTPS.
+-- Uses SECURITY DEFINER so it runs with the postgres role,
+-- bypassing RLS on all tables (our Express API owns auth/authz).
+CREATE OR REPLACE FUNCTION run_sql(query text, params text[] DEFAULT '{}')
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  result jsonb;
+  i      int;
+  p      text;
+BEGIN
+  -- Replace $1, $2 … with quoted literals from the params array
+  i := 1;
+  FOREACH p IN ARRAY params LOOP
+    IF p IS NULL THEN
+      query := replace(query, '$' || i::text, 'NULL');
+    ELSE
+      query := replace(query, '$' || i::text, quote_literal(p));
+    END IF;
+    i := i + 1;
+  END LOOP;
+
+  EXECUTE format('SELECT jsonb_agg(row_to_json(t)) FROM (%s) t', query)
+  INTO result;
+
+  RETURN COALESCE(result, '[]'::jsonb);
+END;
+$$;
+
+-- Grant execute to anon and authenticated roles
+GRANT EXECUTE ON FUNCTION run_sql(text, text[]) TO anon, authenticated;
+
 -- ─── DISABLE ROW LEVEL SECURITY ──────────────────────────────
--- Our Express API handles all auth via JWT. RLS is not needed.
+-- Our Express API handles all auth/authz via JWT.
 ALTER TABLE student_registrations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE admins                DISABLE ROW LEVEL SECURITY;
 ALTER TABLE events                DISABLE ROW LEVEL SECURITY;
