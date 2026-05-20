@@ -1,10 +1,21 @@
 -- ============================================================
--- Zetech Events Hub — Supabase SQL
+-- Zetech Events Hub — Supabase SQL Setup
 -- Paste this ENTIRE block into the Supabase SQL editor and run:
 -- https://supabase.com/dashboard/project/druqtjclfqcbzonjyjoi/sql/new
 -- ============================================================
 
--- ─── TABLES (safe to re-run) ─────────────────────────────────
+-- ─── 1. ADD MISSING COLUMNS TO EXISTING admins TABLE ─────────
+-- (safe to re-run — uses IF NOT EXISTS)
+
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS name  VARCHAR(100);
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS role  VARCHAR(20)  NOT NULL DEFAULT 'admin'
+  CHECK (role IN ('admin','club_leader'));
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS club  VARCHAR(100);
+
+-- Ensure the default admin has role = 'admin'
+UPDATE admins SET role = 'admin' WHERE role IS NULL;
+
+-- ─── 2. CREATE MISSING TABLES ────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS student_registrations (
   id               SERIAL PRIMARY KEY,
@@ -19,17 +30,6 @@ CREATE TABLE IF NOT EXISTS student_registrations (
   created_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS admins (
-  id         SERIAL PRIMARY KEY,
-  email      VARCHAR(255) NOT NULL UNIQUE,
-  password   VARCHAR(255) NOT NULL,
-  role       VARCHAR(20)  NOT NULL DEFAULT 'admin'
-               CHECK (role IN ('admin','club_leader')),
-  name       VARCHAR(100),
-  club       VARCHAR(100),
-  created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS events (
   id               SERIAL PRIMARY KEY,
   title            VARCHAR(255) NOT NULL,
@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS events (
   category         VARCHAR(100) NOT NULL,
   max_participants INT,
   image_url        VARCHAR(500),
-  status           VARCHAR(20)  NOT NULL DEFAULT 'pending',
+  status           VARCHAR(20)  NOT NULL DEFAULT 'pending'
+                     CHECK (status IN ('pending','upcoming','ongoing','completed','cancelled','rejected')),
   created_by       INT          NOT NULL REFERENCES admins(id),
   created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
@@ -56,13 +57,7 @@ CREATE TABLE IF NOT EXISTS event_registrations (
   UNIQUE (event_id, student_id)
 );
 
--- ─── UPDATE EVENTS STATUS CONSTRAINT (adds pending/rejected) ─
-
-ALTER TABLE events DROP CONSTRAINT IF EXISTS events_status_check;
-ALTER TABLE events ADD CONSTRAINT events_status_check
-  CHECK (status IN ('pending','upcoming','ongoing','completed','cancelled','rejected'));
-
--- ─── AUTO-UPDATE updated_at TRIGGER ──────────────────────────
+-- ─── 3. AUTO-UPDATE updated_at TRIGGER ───────────────────────
 
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
@@ -74,50 +69,9 @@ CREATE TRIGGER events_updated_at
   BEFORE UPDATE ON events
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
--- ─── run_sql RPC ─────────────────────────────────────────────
--- Allows the Express backend to run parameterised queries via HTTPS.
--- SECURITY DEFINER + search_path ensures it runs safely as postgres.
--- RLS is disabled on all tables so only our server can reach this.
+-- ─── 4. DISABLE ROW LEVEL SECURITY ───────────────────────────
 
-CREATE OR REPLACE FUNCTION run_sql(query text, params text[] DEFAULT '{}')
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  result jsonb;
-  i      int;
-  p      text;
-BEGIN
-  i := 1;
-  FOREACH p IN ARRAY params LOOP
-    IF p IS NULL THEN
-      query := replace(query, '$' || i::text, 'NULL');
-    ELSE
-      query := replace(query, '$' || i::text, quote_literal(p));
-    END IF;
-    i := i + 1;
-  END LOOP;
-  EXECUTE format('SELECT COALESCE(jsonb_agg(row_to_json(t)), ''[]''::jsonb) FROM (%s) t', query)
-  INTO result;
-  RETURN COALESCE(result, '[]'::jsonb);
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION run_sql(text, text[]) TO anon, authenticated;
-
--- ─── DISABLE ROW LEVEL SECURITY ──────────────────────────────
-
-ALTER TABLE student_registrations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE admins                DISABLE ROW LEVEL SECURITY;
+ALTER TABLE student_registrations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE events                DISABLE ROW LEVEL SECURITY;
 ALTER TABLE event_registrations   DISABLE ROW LEVEL SECURITY;
-
--- ─── SEED DEFAULT ADMIN ───────────────────────────────────────
-
-INSERT INTO admins (email, password, role, name)
-VALUES ('admin@zetech.ac.ke', 'admin123', 'admin', 'Admin User')
-ON CONFLICT (email) DO UPDATE
-  SET role = EXCLUDED.role,
-      name = COALESCE(admins.name, EXCLUDED.name);
