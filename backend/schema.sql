@@ -1,10 +1,10 @@
 -- ============================================================
--- Zetech Events Hub — PostgreSQL schema for Supabase
--- Run this ONCE in the Supabase SQL editor:
---   https://supabase.com/dashboard/project/druqtjclfqcbzonjyjoi/sql/new
+-- Zetech Events Hub — Supabase SQL
+-- Paste this ENTIRE block into the Supabase SQL editor and run:
+-- https://supabase.com/dashboard/project/druqtjclfqcbzonjyjoi/sql/new
 -- ============================================================
 
--- ─── TABLES ──────────────────────────────────────────────────
+-- ─── TABLES (safe to re-run) ─────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS student_registrations (
   id               SERIAL PRIMARY KEY,
@@ -40,8 +40,7 @@ CREATE TABLE IF NOT EXISTS events (
   category         VARCHAR(100) NOT NULL,
   max_participants INT,
   image_url        VARCHAR(500),
-  status           VARCHAR(20)  NOT NULL DEFAULT 'upcoming'
-                     CHECK (status IN ('upcoming','ongoing','completed','cancelled')),
+  status           VARCHAR(20)  NOT NULL DEFAULT 'pending',
   created_by       INT          NOT NULL REFERENCES admins(id),
   created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
@@ -57,7 +56,14 @@ CREATE TABLE IF NOT EXISTS event_registrations (
   UNIQUE (event_id, student_id)
 );
 
--- Auto-update updated_at on events
+-- ─── UPDATE EVENTS STATUS CONSTRAINT (adds pending/rejected) ─
+
+ALTER TABLE events DROP CONSTRAINT IF EXISTS events_status_check;
+ALTER TABLE events ADD CONSTRAINT events_status_check
+  CHECK (status IN ('pending','upcoming','ongoing','completed','cancelled','rejected'));
+
+-- ─── AUTO-UPDATE updated_at TRIGGER ──────────────────────────
+
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
@@ -68,10 +74,11 @@ CREATE TRIGGER events_updated_at
   BEFORE UPDATE ON events
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
--- ─── run_sql RPC — used by the Express backend ───────────────
--- Executes parameterised SQL sent from the backend via HTTPS.
--- Uses SECURITY DEFINER so it runs with the postgres role,
--- bypassing RLS on all tables (our Express API owns auth/authz).
+-- ─── run_sql RPC ─────────────────────────────────────────────
+-- Allows the Express backend to run parameterised queries via HTTPS.
+-- SECURITY DEFINER + search_path ensures it runs safely as postgres.
+-- RLS is disabled on all tables so only our server can reach this.
+
 CREATE OR REPLACE FUNCTION run_sql(query text, params text[] DEFAULT '{}')
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -83,7 +90,6 @@ DECLARE
   i      int;
   p      text;
 BEGIN
-  -- Replace $1, $2 … with quoted literals from the params array
   i := 1;
   FOREACH p IN ARRAY params LOOP
     IF p IS NULL THEN
@@ -93,26 +99,23 @@ BEGIN
     END IF;
     i := i + 1;
   END LOOP;
-
-  EXECUTE format('SELECT jsonb_agg(row_to_json(t)) FROM (%s) t', query)
+  EXECUTE format('SELECT COALESCE(jsonb_agg(row_to_json(t)), ''[]''::jsonb) FROM (%s) t', query)
   INTO result;
-
   RETURN COALESCE(result, '[]'::jsonb);
 END;
 $$;
 
--- Grant execute to anon and authenticated roles
 GRANT EXECUTE ON FUNCTION run_sql(text, text[]) TO anon, authenticated;
 
 -- ─── DISABLE ROW LEVEL SECURITY ──────────────────────────────
--- Our Express API handles all auth/authz via JWT.
+
 ALTER TABLE student_registrations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE admins                DISABLE ROW LEVEL SECURITY;
 ALTER TABLE events                DISABLE ROW LEVEL SECURITY;
 ALTER TABLE event_registrations   DISABLE ROW LEVEL SECURITY;
 
 -- ─── SEED DEFAULT ADMIN ───────────────────────────────────────
--- Password 'admin123' is upgraded to bcrypt on first login.
+
 INSERT INTO admins (email, password, role, name)
 VALUES ('admin@zetech.ac.ke', 'admin123', 'admin', 'Admin User')
 ON CONFLICT (email) DO UPDATE

@@ -60,6 +60,11 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
       }).then(handleResponse),
 
+    getRecent: (limit = 12) =>
+      fetch(`${API_BASE_URL}/events/recent?limit=${limit}`, {
+        headers: { 'Content-Type': 'application/json' },
+      }).then(handleResponse),
+
     getById: (id: string) =>
       fetch(`${API_BASE_URL}/events/${id}`, {
         headers: { 'Content-Type': 'application/json' },
@@ -109,6 +114,28 @@ export const api = {
   admin: {
     getDashboardStats: () =>
       fetch(`${API_BASE_URL}/admin/dashboard/stats`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+
+    getAllEvents: () =>
+      fetch(`${API_BASE_URL}/admin/events`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+
+    getPendingEvents: () =>
+      fetch(`${API_BASE_URL}/admin/events/pending`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+
+    approveEvent: (id: string | number) =>
+      fetch(`${API_BASE_URL}/admin/events/${id}/approve`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+      }).then(handleResponse),
+
+    rejectEvent: (id: string | number) =>
+      fetch(`${API_BASE_URL}/admin/events/${id}/reject`, {
+        method: 'PATCH',
         headers: authHeaders(),
       }).then(handleResponse),
 
@@ -181,6 +208,11 @@ export const api = {
   clubLeader: {
     getDashboard: () =>
       fetch(`${API_BASE_URL}/club-leader/dashboard`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+
+    getEventRegistrations: (eventId: string | number) =>
+      fetch(`${API_BASE_URL}/club-leader/events/${eventId}/registrations`, {
         headers: authHeaders(),
       }).then(handleResponse),
 

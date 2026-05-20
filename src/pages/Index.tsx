@@ -8,53 +8,46 @@ import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
-const Index = () => {
-  const [allEvents, setAllEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  
-  useEffect(() => {
-    // Load events from API
-    const loadEvents = async () => {
-      try {
-        const eventsData = await api.events.getAll();
-        // Transform API data to match frontend Event interface
-        const transformedEvents = eventsData.map((event: any) => ({
-          id: event.id.toString(),
-          title: event.title,
-          description: event.description,
-          date: event.date,
-          time: event.time,
-          venue: event.location,
-          campus: "Main Campus",
-          posterUrl: event.image_url || "",
-          status: event.status === "upcoming" ? "approved" as const : "pending" as const,
-          registrations: event.registered_count || 0,
-          capacity: event.max_participants || 0,
-          organizer: event.created_by_email || "Admin",
-          category: event.category,
-          featured: false
-        }));
-        setAllEvents(transformedEvents);
-      } catch (error) {
-        console.error("Failed to load events:", error);
-        setAllEvents([]);
-      } finally {
-        setLoading(false);
-      }
-    };
+function transformEvent(event: any): Event {
+  return {
+    id: event.id.toString(),
+    title: event.title,
+    description: event.description,
+    date: event.date,
+    time: event.time,
+    venue: event.location,
+    campus: event.creator_club || "Zetech University",
+    posterUrl: event.image_url || "",
+    status: "approved" as const,
+    registrations: event.registered_count || 0,
+    capacity: event.max_participants || 0,
+    organizer: event.created_by_name || event.created_by_email || "Zetech University",
+    category: event.category,
+    featured: false,
+  };
+}
 
-    loadEvents();
+const Index = () => {
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.events.getRecent(12)
+      .then((data: any[]) => setEvents(data.map(transformEvent)))
+      .catch(() => {
+        // Fallback: load from public events list
+        return api.events.getAll()
+          .then((data: any[]) => setEvents(data.slice(0, 12).map(transformEvent)))
+          .catch(() => setEvents([]));
+      })
+      .finally(() => setLoading(false));
   }, []);
-  
-  const featuredEvent = allEvents.find((e) => e.featured);
-  const upcomingEvents = allEvents.filter((e) => !e.featured).slice(0, 4);
-  
 
   if (loading) {
     return (
       <Layout>
         <div className="container py-20 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" />
           <p className="mt-4 text-muted-foreground">Loading events...</p>
         </div>
       </Layout>
@@ -65,69 +58,32 @@ const Index = () => {
     <Layout>
       <HeroSection />
 
-      {/* Featured Event */}
-      {featuredEvent ? (
-        <section className="container py-12">
-          <h2 className="font-heading text-2xl font-bold text-foreground mb-6">Featured Event</h2>
-          <Link
-            to={`/events/${featuredEvent.id}`}
-            className="block bg-card rounded-xl overflow-hidden card-shadow hover:card-shadow-hover transition-all duration-300 md:flex"
-          >
-            <div className="md:w-1/3 h-48 md:h-auto hero-gradient flex items-center justify-center">
-              <div className="text-center text-primary-foreground p-4 sm:p-6">
-                <div className="text-xs sm:text-sm font-semibold tracking-widest opacity-80">
-                  {new Date(featuredEvent.date).toLocaleString("default", { month: "short" }).toUpperCase()}
-                </div>
-                <div className="text-3xl sm:text-4xl md:text-5xl font-heading font-bold">{new Date(featuredEvent.date).getDate()}</div>
-                <div className="text-xs sm:text-sm mt-1 sm:mt-2 opacity-70">{featuredEvent.time}</div>
-              </div>
-            </div>
-            <div className="p-4 sm:p-6 md:p-8 flex-1">
-              <span className="inline-block bg-secondary text-secondary-foreground text-xs sm:text-sm font-semibold px-2 sm:px-3 py-1 rounded-full mb-2 sm:mb-3">
-                {featuredEvent.category}
-              </span>
-              <h3 className="font-heading text-lg sm:text-xl md:text-2xl font-bold text-foreground mb-2">{featuredEvent.title}</h3>
-              <p className="text-muted-foreground text-xs sm:text-sm mb-3 sm:mb-4 line-clamp-2">{featuredEvent.description}</p>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
-                <span>📍 {featuredEvent.venue}</span>
-                <span>👥 {featuredEvent.registrations}/{featuredEvent.capacity}</span>
-              </div>
-            </div>
-          </Link>
-        </section>
-      ) : (
-        <section className="container py-12">
-          <div className="text-center py-16">
-            <h2 className="font-heading text-2xl font-bold text-foreground mb-4">No Featured Events</h2>
-            <p className="text-muted-foreground mb-6">There are currently no featured events. Check back soon for exciting campus activities!</p>
-          </div>
-        </section>
-      )}
-
-      {/* Upcoming Events */}
-      <section className="container pb-16">
+      <section className="container pb-16 pt-10">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-          <h2 className="font-heading text-xl sm:text-2xl font-bold text-foreground">Upcoming Events</h2>
+          <div>
+            <h2 className="font-heading text-xl sm:text-2xl font-bold text-foreground">Upcoming Events</h2>
+            <p className="text-muted-foreground text-sm mt-1">The latest approved events on campus</p>
+          </div>
           <Button asChild variant="ghost" className="text-primary">
             <Link to="/events">
-              View All <ArrowRight className="w-4 h-4 ml-1" />
+              Browse All <ArrowRight className="w-4 h-4 ml-1" />
             </Link>
           </Button>
         </div>
-        {upcomingEvents.length > 0 ? (
+
+        {events.length > 0 ? (
           <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-            {upcomingEvents.map((event) => (
+            {events.map((event) => (
               <EventCard key={event.id} event={event} />
             ))}
           </div>
         ) : (
-          <div className="text-center py-16">
-            <p className="text-lg text-muted-foreground mb-4">No upcoming events</p>
-            <p className="text-sm text-muted-foreground">Events will appear here once they are scheduled. Stay tuned!</p>
+          <div className="text-center py-20">
+            <p className="text-lg text-muted-foreground mb-2">No upcoming events right now</p>
+            <p className="text-sm text-muted-foreground">Check back soon — events are on their way!</p>
           </div>
         )}
       </section>
-
     </Layout>
   );
 };

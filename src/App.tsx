@@ -25,23 +25,36 @@ const queryClient = new QueryClient({
   },
 });
 
+const Spinner = ({ color = "blue" }: { color?: string }) => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className={`w-8 h-8 border-4 border-${color}-600 border-t-transparent rounded-full animate-spin`} />
+  </div>
+);
+
 function ProtectedAdmin({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return <Spinner color="blue" />;
   if (!user || user.role !== "admin") return <Navigate to="/auth" replace />;
   return <>{children}</>;
 }
 
 function ProtectedClubLeader({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return <Spinner color="green" />;
   if (!user || user.role !== "club_leader") return <Navigate to="/auth" replace />;
+  return <>{children}</>;
+}
+
+function ProtectedAdminOrLeader({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <Spinner color="blue" />;
+  if (!user || (user.role !== "admin" && user.role !== "club_leader")) return <Navigate to="/auth" replace />;
   return <>{children}</>;
 }
 
 function ProtectedStudent({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return <Spinner color="blue" />;
   if (!user || user.role !== "user") return <Navigate to="/auth" replace />;
   return <>{children}</>;
 }
@@ -61,7 +74,8 @@ const App = () => (
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/profile" element={<ProtectedStudent><Profile /></ProtectedStudent>} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/create-event" element={<ProtectedAdmin><CreateEvent /></ProtectedAdmin>} />
+            {/* Both admin and club leaders can create events */}
+            <Route path="/create-event" element={<ProtectedAdminOrLeader><CreateEvent /></ProtectedAdminOrLeader>} />
             <Route path="/admin/dashboard" element={<ProtectedAdmin><AdminDashboard /></ProtectedAdmin>} />
             <Route path="/club-leader/dashboard" element={<ProtectedClubLeader><ClubLeaderDashboard /></ProtectedClubLeader>} />
             <Route path="*" element={<NotFound />} />
