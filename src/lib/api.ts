@@ -185,6 +185,11 @@ export const api = {
         headers: authHeaders(),
       }).then(handleResponse),
 
+    getStudentActivity: (studentId: string | number) =>
+      fetch(`${API_BASE_URL}/admin/students/${studentId}/activity`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+
     getActivity: () =>
       fetch(`${API_BASE_URL}/admin/activity`, {
         headers: authHeaders(),

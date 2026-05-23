@@ -1557,6 +1557,28 @@ app.delete("/api/admin/students/:studentId", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── STUDENT ACTIVITY ─────────────────────────────────────────────────────────
+
+app.get("/api/admin/students/:studentId/activity", requireAdmin, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const result = await pool.query(
+      `SELECT er.id, er.registration_date, er.status AS reg_status,
+              e.title, e.date, e.time, e.location, e.category, e.status AS event_status
+       FROM event_registrations er
+       JOIN events e ON e.id = er.event_id
+       WHERE er.student_id = $1
+       ORDER BY er.registration_date DESC
+       LIMIT 50`,
+      [studentId]
+    );
+    res.json({ registrations: result.rows });
+  } catch (error) {
+    console.error("Student activity error:", error);
+    res.status(500).json({ message: "Failed to load student activity" });
+  }
+});
+
 // ─── ANALYTICS ────────────────────────────────────────────────────────────────
 
 app.get("/api/admin/analytics", requireAdmin, async (req, res) => {

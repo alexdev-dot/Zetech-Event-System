@@ -57,6 +57,7 @@ import AdminAccountSettings from "@/components/AdminAccountSettings";
 import AdminQuickActions from "@/components/AdminQuickActions";
 import AdminSystemSettings from "@/components/AdminSystemSettings";
 import AdminAnalytics from "@/components/AdminAnalytics";
+import AdminCombinedSettings from "@/components/AdminCombinedSettings";
 
 // ---- Local types for admin pages ----
 type AdminEvent = {
@@ -1212,7 +1213,6 @@ const AdminDashboard = () => {
     { id: "leaders", label: "Club Leaders", icon: UsersIcon },
     { id: "students", label: "Students", icon: Users },
     { id: "system", label: "System Settings", icon: Settings },
-    { id: "settings", label: "Account", icon: Lock },
   ];
 
   return (
@@ -1483,7 +1483,7 @@ const AdminDashboard = () => {
 
       {/* Main Content */}
       <main
-        className={`w-full pt-14 md:pt-0 overflow-y-auto min-h-screen transition-all duration-300 ${sidebarOpen ? "md:ml-48" : "md:ml-14"}`}
+        className={`pt-14 md:pt-0 overflow-x-hidden overflow-y-auto min-h-screen transition-all duration-300 ${sidebarOpen ? "md:ml-64" : "md:ml-20"}`}
       >
         <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8 max-w-6xl mx-auto">
           {/* Content based on active view */}
@@ -1560,8 +1560,9 @@ const AdminDashboard = () => {
           {activeView === "leaders" && <ClubLeadersTab />}
           {activeView === "students" && <StudentManagement />}
           {activeView === "analytics" && <AdminAnalytics />}
-          {activeView === "system" && <AdminSystemSettings />}
-          {activeView === "settings" && <AdminAccountSettings />}
+          {activeView === "system" && (
+            <AdminCombinedSettings user={user} />
+          )}
         </div>
 
         {/* Minimal Footer */}

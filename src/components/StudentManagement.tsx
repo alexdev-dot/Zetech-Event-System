@@ -53,6 +53,210 @@ interface Student {
   created_at: string;
 }
 
+// ─── Student Details Modal (top-level so hooks work correctly) ────────────────
+
+interface StudentDetailsModalProps {
+  student: Student;
+}
+
+function StudentDetailsModal({ student }: StudentDetailsModalProps) {
+  const [registrations, setRegistrations] = useState<any[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+
+  useEffect(() => {
+    setActivityLoading(true);
+    api.admin.getStudentActivity(student.id)
+      .then((data) => setRegistrations(data.registrations || []))
+      .catch(() => setRegistrations([]))
+      .finally(() => setActivityLoading(false));
+  }, [student.id]);
+
+  const attended = registrations.filter((r) => r.reg_status === "attended").length;
+
+  return (
+    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+            <Users className="w-6 h-6 text-blue-600" />
+          </div>
+          <div>
+            <div>{student.first_name} {student.last_name}</div>
+            <div className="text-sm font-normal text-muted-foreground">{student.admission_number}</div>
+          </div>
+        </DialogTitle>
+        <DialogDescription>
+          Student details and activity information
+        </DialogDescription>
+      </DialogHeader>
+
+      <Tabs defaultValue="profile" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="events">Events</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profile" className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Email Address</Label>
+              <div className="flex items-center gap-2 text-sm">
+                <Mail className="w-4 h-4 text-muted-foreground" />
+                {student.email}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Admission Number</Label>
+              <div className="flex items-center gap-2 text-sm">
+                <BookOpen className="w-4 h-4 text-muted-foreground" />
+                {student.admission_number}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Registration Date</Label>
+              <div className="flex items-center gap-2 text-sm">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                {new Date(student.created_at).toLocaleDateString()}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Student ID</Label>
+              <div className="flex items-center gap-2 text-sm">
+                <Award className="w-4 h-4 text-muted-foreground" />
+                {student.id}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between pt-4 border-t">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium">Account Status:</Label>
+              <Badge variant="default">Active</Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium">Events Registered:</Label>
+              <Badge variant="secondary">{registrations.length}</Badge>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="activity" className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <div className="text-2xl font-bold">{registrations.length}</div>
+                    <div className="text-sm text-muted-foreground">Events Registered</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <div>
+                    <div className="text-2xl font-bold">{attended}</div>
+                    <div className="text-sm text-muted-foreground">Attended</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Registration History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {activityLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="w-5 h-5 animate-spin text-blue-500" />
+                </div>
+              ) : registrations.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No event registrations yet
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {registrations.map((reg) => (
+                    <div key={reg.id} className="flex items-start gap-3 p-3 border rounded-lg">
+                      <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${
+                        reg.reg_status === "attended" ? "bg-green-500"
+                        : reg.reg_status === "cancelled" ? "bg-red-500"
+                        : "bg-blue-500"
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{reg.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(reg.date).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })} · {reg.category}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge
+                            variant={reg.reg_status === "attended" ? "default" : reg.reg_status === "cancelled" ? "destructive" : "secondary"}
+                            className="text-xs capitalize"
+                          >
+                            {reg.reg_status}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            Registered {new Date(reg.registration_date).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="events" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Registered Events</CardTitle>
+              <CardDescription>Events this student has registered for</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {activityLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="w-5 h-5 animate-spin text-blue-500" />
+                </div>
+              ) : registrations.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No events registered yet
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {registrations.map((reg) => (
+                    <div key={reg.id} className="flex items-center justify-between p-3 border rounded-lg text-sm">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{reg.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(reg.date).toLocaleDateString()} · {reg.location}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={reg.event_status === "upcoming" ? "default" : reg.event_status === "completed" ? "secondary" : "outline"}
+                        className="ml-2 capitalize flex-shrink-0"
+                      >
+                        {reg.event_status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </DialogContent>
+  );
+}
+
+// ─── Main StudentManagement component ────────────────────────────────────────
+
 export default function StudentManagement() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,129 +339,6 @@ export default function StudentManagement() {
       </Badge>
     );
   };
-
-  const StudentDetailsModal = ({ student }: { student: Student }) => (
-    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-            <Users className="w-6 h-6 text-blue-600" />
-          </div>
-          <div>
-            <div>{student.first_name} {student.last_name}</div>
-            <div className="text-sm font-normal text-muted-foreground">{student.admission_number}</div>
-          </div>
-        </DialogTitle>
-        <DialogDescription>
-          Student details and activity information
-        </DialogDescription>
-      </DialogHeader>
-      
-      <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
-          <TabsTrigger value="events">Events</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="profile" className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Email Address</Label>
-              <div className="flex items-center gap-2 text-sm">
-                <Mail className="w-4 h-4 text-muted-foreground" />
-                {student.email}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Admission Number</Label>
-              <div className="flex items-center gap-2 text-sm">
-                <BookOpen className="w-4 h-4 text-muted-foreground" />
-                {student.admission_number}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Registration Date</Label>
-              <div className="flex items-center gap-2 text-sm">
-                <Calendar className="w-4 h-4 text-muted-foreground" />
-                {new Date(student.created_at).toLocaleDateString()}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Student ID</Label>
-              <div className="flex items-center gap-2 text-sm">
-                <Award className="w-4 h-4 text-muted-foreground" />
-                {student.id}
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex items-center justify-between pt-4 border-t">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium">Account Status:</Label>
-              <Badge variant="default">Active</Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium">Profile Complete:</Label>
-              <Badge variant="default">Complete</Badge>
-            </div>
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="activity" className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-blue-600" />
-                  <div>
-                    <div className="text-2xl font-bold">0</div>
-                    <div className="text-sm text-muted-foreground">Events Attended</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-green-600" />
-                  <div>
-                    <div className="text-2xl font-bold">Active</div>
-                    <div className="text-sm text-muted-foreground">Account Status</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                No recent activity to display
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="events" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Registered Events</CardTitle>
-              <CardDescription>Events this student has registered for</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                No events registered yet
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </DialogContent>
-  );
 
   return (
     <div className="space-y-6">

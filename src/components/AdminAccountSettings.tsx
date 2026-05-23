@@ -421,7 +421,7 @@ function ActivityLog() {
     setLoading(true);
     try {
       const data = await api.admin.getActivity();
-      setActivities(data || []);
+      setActivities(Array.isArray(data) ? data : []);
     } catch (error: any) {
       console.error("Failed to load activity log:", error);
       // Fallback to mock data if API fails
