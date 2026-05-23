@@ -155,6 +155,7 @@ const uploadLimiter = rateLimit({
   message: { message: "Upload rate limit exceeded." },
 });
 
+app.set("trust proxy", 1);
 app.use(globalLimiter);
 app.use(express.json({ limit: "2mb" }));
 
@@ -1556,6 +1557,101 @@ app.delete("/api/admin/students/:studentId", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── ANALYTICS ────────────────────────────────────────────────────────────────
+
+app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
+  try {
+    const [
+      registrationsPerEvent,
+      registrationTrends,
+      peakDays,
+      statusBreakdown,
+      categoryBreakdown,
+      topEvents,
+    ] = await Promise.all([
+      // Registrations per event (top 15 by count)
+      pool.query(`
+        SELECT e.title, e.date, e.category,
+               COUNT(er.id)::int AS registrations,
+               COALESCE(e.max_participants, 0) AS capacity
+        FROM events e
+        LEFT JOIN event_registrations er ON er.event_id = e.id AND er.status = 'registered'
+        WHERE e.status NOT IN ('pending','rejected')
+        GROUP BY e.id, e.title, e.date, e.category, e.max_participants
+        ORDER BY registrations DESC
+        LIMIT 15
+      `),
+
+      // Registration trends by week (last 12 weeks)
+      pool.query(`
+        SELECT TO_CHAR(DATE_TRUNC('week', registration_date), 'Mon DD') AS week,
+               COUNT(*)::int AS registrations
+        FROM event_registrations
+        WHERE registration_date >= NOW() - INTERVAL '12 weeks'
+        GROUP BY DATE_TRUNC('week', registration_date)
+        ORDER BY DATE_TRUNC('week', registration_date)
+      `),
+
+      // Peak activity by day of week
+      pool.query(`
+        SELECT TO_CHAR(registration_date, 'Dy') AS day,
+               EXTRACT(DOW FROM registration_date)::int AS day_num,
+               COUNT(*)::int AS registrations
+        FROM event_registrations
+        GROUP BY TO_CHAR(registration_date, 'Dy'), EXTRACT(DOW FROM registration_date)
+        ORDER BY day_num
+      `),
+
+      // Event status breakdown
+      pool.query(`
+        SELECT status, COUNT(*)::int AS count
+        FROM events
+        GROUP BY status
+        ORDER BY count DESC
+      `),
+
+      // Events by category
+      pool.query(`
+        SELECT category, COUNT(*)::int AS total_events,
+               COALESCE(SUM(sub.reg_count), 0)::int AS total_registrations
+        FROM events e
+        LEFT JOIN (
+          SELECT event_id, COUNT(*)::int AS reg_count
+          FROM event_registrations WHERE status = 'registered'
+          GROUP BY event_id
+        ) sub ON sub.event_id = e.id
+        GROUP BY category
+        ORDER BY total_registrations DESC
+        LIMIT 10
+      `),
+
+      // Top 5 most registered events with fill %
+      pool.query(`
+        SELECT e.id, e.title, e.date, e.status,
+               COUNT(er.id)::int AS registrations,
+               e.max_participants AS capacity
+        FROM events e
+        LEFT JOIN event_registrations er ON er.event_id = e.id AND er.status = 'registered'
+        GROUP BY e.id, e.title, e.date, e.status, e.max_participants
+        ORDER BY registrations DESC
+        LIMIT 5
+      `),
+    ]);
+
+    res.json({
+      registrationsPerEvent: registrationsPerEvent.rows,
+      registrationTrends: registrationTrends.rows,
+      peakDays: peakDays.rows,
+      statusBreakdown: statusBreakdown.rows,
+      categoryBreakdown: categoryBreakdown.rows,
+      topEvents: topEvents.rows,
+    });
+  } catch (error) {
+    console.error("Analytics error:", error);
+    res.status(500).json({ message: "Failed to load analytics" });
+  }
+});
+
 app.get("/api/admin/activity", requireAdmin, async (req, res) => {
   try {
     const [
@@ -2078,10 +2174,31 @@ app.put("/api/club-leader/account", requireAdminOrLeader, async (req, res) => {
 
 // ─── START SERVER ─────────────────────────────────────────────────────────────
 
+async function seedDefaultAdmin() {
+  try {
+    const existing = await pool.query(
+      `SELECT id FROM admins WHERE admin_email = $1 LIMIT 1`,
+      ["admin@zetech.ac.ke"]
+    );
+    if (existing.rows.length === 0) {
+      const hash = await bcrypt.hash("admin123", 12);
+      await pool.query(
+        `INSERT INTO admins (admin_email, password_hash, name, role)
+         VALUES ($1, $2, $3, 'admin')`,
+        ["admin@zetech.ac.ke", hash, "System Administrator"]
+      );
+      console.log("Default admin seeded ✓ (admin@zetech.ac.ke / admin123)");
+    }
+  } catch (err) {
+    console.warn("Admin seed warning:", err.message);
+  }
+}
+
 async function startServer() {
   try {
     await testConnection();
     await ensureDatabaseSchema();
+    await seedDefaultAdmin();
     console.log("Database: connected ✓");
   } catch (error) {
     console.error("Database connection failed:", error.message);

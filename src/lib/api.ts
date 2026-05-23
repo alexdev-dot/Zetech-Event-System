@@ -180,6 +180,11 @@ export const api = {
         body: JSON.stringify(data),
       }).then(handleResponse),
 
+    getAnalytics: () =>
+      fetch(`${API_BASE_URL}/admin/analytics`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+
     getActivity: () =>
       fetch(`${API_BASE_URL}/admin/activity`, {
         headers: authHeaders(),

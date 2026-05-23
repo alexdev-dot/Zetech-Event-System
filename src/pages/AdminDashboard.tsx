@@ -56,6 +56,7 @@ import StudentManagement from "@/components/StudentManagement";
 import AdminAccountSettings from "@/components/AdminAccountSettings";
 import AdminQuickActions from "@/components/AdminQuickActions";
 import AdminSystemSettings from "@/components/AdminSystemSettings";
+import AdminAnalytics from "@/components/AdminAnalytics";
 
 // ---- Local types for admin pages ----
 type AdminEvent = {
@@ -1207,6 +1208,7 @@ const AdminDashboard = () => {
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "pending", label: "Pending Events", icon: Bell, badge: pendingCount },
     { id: "events", label: "All Events", icon: FileText },
+    { id: "analytics", label: "Analytics", icon: TrendingUp },
     { id: "leaders", label: "Club Leaders", icon: UsersIcon },
     { id: "students", label: "Students", icon: Users },
     { id: "system", label: "System Settings", icon: Settings },
@@ -1557,6 +1559,7 @@ const AdminDashboard = () => {
           {activeView === "events" && <AllEventsTab />}
           {activeView === "leaders" && <ClubLeadersTab />}
           {activeView === "students" && <StudentManagement />}
+          {activeView === "analytics" && <AdminAnalytics />}
           {activeView === "system" && <AdminSystemSettings />}
           {activeView === "settings" && <AdminAccountSettings />}
         </div>
