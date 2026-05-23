@@ -8,21 +8,39 @@ import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
-function transformEvent(event: any): Event {
+type BackendEvent = {
+  id: number | string;
+  title?: string | null;
+  description?: string | null;
+  date?: string | null;
+  time?: string | null;
+  location?: string | null;
+  image_url?: string | null;
+  status?: string | null;
+  registered_count?: number | null;
+  max_participants?: number | null;
+  created_by_name?: string | null;
+  created_by_email?: string | null;
+  creator_club?: string | null;
+  category?: string | null;
+};
+
+function transformEvent(event: BackendEvent): Event {
   return {
-    id: event.id.toString(),
-    title: event.title,
-    description: event.description,
-    date: event.date,
-    time: event.time,
-    venue: event.location,
-    campus: event.creator_club || "Zetech University",
-    posterUrl: event.image_url || "",
-    status: "approved" as const,
-    registrations: event.registered_count || 0,
-    capacity: event.max_participants || 0,
-    organizer: event.created_by_name || event.created_by_email || "Zetech University",
-    category: event.category,
+    id: String(event.id),
+    title: event.title ?? "",
+    description: event.description ?? "",
+    date: event.date ?? "",
+    time: event.time ?? "",
+    venue: event.location ?? "",
+    campus: event.creator_club ?? "Zetech University",
+    posterUrl: event.image_url ?? "",
+    status: "approved",
+    registrations: event.registered_count ?? 0,
+    capacity: event.max_participants ?? 0,
+    organizer:
+      event.created_by_name ?? event.created_by_email ?? "Zetech University",
+    category: event.category ?? "",
     featured: false,
   };
 }
@@ -32,12 +50,16 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.events.getRecent(12)
-      .then((data: any[]) => setEvents(data.map(transformEvent)))
+    api.events
+      .getRecent(12)
+      .then((data: BackendEvent[]) => setEvents(data.map(transformEvent)))
       .catch(() => {
         // Fallback: load from public events list
-        return api.events.getAll()
-          .then((data: any[]) => setEvents(data.slice(0, 12).map(transformEvent)))
+        return api.events
+          .getAll()
+          .then((data: BackendEvent[]) =>
+            setEvents(data.slice(0, 12).map(transformEvent)),
+          )
           .catch(() => setEvents([]));
       })
       .finally(() => setLoading(false));
@@ -61,8 +83,12 @@ const Index = () => {
       <section className="container pb-16 pt-10">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <div>
-            <h2 className="font-heading text-xl sm:text-2xl font-bold text-foreground">Upcoming Events</h2>
-            <p className="text-muted-foreground text-sm mt-1">The latest approved events on campus</p>
+            <h2 className="font-heading text-xl sm:text-2xl font-bold text-foreground">
+              Upcoming Events
+            </h2>
+            <p className="text-muted-foreground text-sm mt-1">
+              The latest approved events on campus
+            </p>
           </div>
           <Button asChild variant="ghost" className="text-primary">
             <Link to="/events">
@@ -79,8 +105,12 @@ const Index = () => {
           </div>
         ) : (
           <div className="text-center py-20">
-            <p className="text-lg text-muted-foreground mb-2">No upcoming events right now</p>
-            <p className="text-sm text-muted-foreground">Check back soon — events are on their way!</p>
+            <p className="text-lg text-muted-foreground mb-2">
+              No upcoming events right now
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Check back soon — events are on their way!
+            </p>
           </div>
         )}
       </section>

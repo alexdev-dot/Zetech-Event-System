@@ -34,7 +34,7 @@ const CreateEvent = () => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [formData, setFormData] = useState<EventFormData>({
     title: "",
     description: "",
@@ -49,80 +49,55 @@ const CreateEvent = () => {
   });
 
   const handleInputChange = (field: keyof EventFormData, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleFileUpload = (file: File) => {
-    // Check file type
+  const handleFileUpload = async (file: File) => {
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
       toast.error("Please upload an image file (JPEG, PNG, GIF, or WebP)");
       return;
     }
-
-    // Check file size (5MB limit)
     if (file.size > 5 * 1024 * 1024) {
       toast.error("File size must be less than 5MB");
       return;
     }
 
     setUploadedFile(file);
-    
-    // Create preview URL
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      setPreviewUrl(result);
-      setFormData(prev => ({
-        ...prev,
-        flyerUrl: result
-      }));
-    };
+    reader.onload = (e) => setPreviewUrl(e.target?.result as string);
     reader.readAsDataURL(file);
-    
-    toast.success("Flyer uploaded successfully!");
+
+    try {
+      const response = await api.upload.image(file);
+      setFormData(prev => ({ ...prev, flyerUrl: response.imageUrl }));
+      toast.success("Flyer uploaded successfully!");
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to upload flyer");
+      setUploadedFile(null);
+      setPreviewUrl("");
+    }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); };
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
     const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      handleFileUpload(files[0]);
-    }
+    if (files.length > 0) handleFileUpload(files[0]);
   };
-
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files && files.length > 0) {
-      handleFileUpload(files[0]);
-    }
+    if (files && files.length > 0) handleFileUpload(files[0]);
   };
 
   const removeFile = () => {
     setUploadedFile(null);
     setPreviewUrl("");
-    setFormData(prev => ({
-      ...prev,
-      flyerUrl: ""
-    }));
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    setFormData(prev => ({ ...prev, flyerUrl: "" }));
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -130,27 +105,32 @@ const CreateEvent = () => {
     setIsSubmitting(true);
 
     try {
-      // Create event data for API
+      const location = formData.campus
+        ? `${formData.venue}, ${formData.campus}`
+        : formData.venue;
+
       const eventData = {
         title: formData.title,
         description: formData.description,
         date: formData.date,
         time: formData.time,
-        location: formData.venue, // API uses 'location' instead of 'venue'
+        location,
         category: formData.category,
         maxParticipants: parseInt(formData.capacity) || undefined,
-        imageUrl: formData.flyerUrl || undefined
+        imageUrl: formData.flyerUrl || undefined,
       };
 
-      // Send to API
       await api.events.create(eventData);
 
-      toast.success("Event created successfully!");
-      
-      // Navigate back to events page
-      navigate("/events");
-    } catch (error) {
-      toast.error("Failed to create event. Please try again.");
+      if (user?.role === "club_leader") {
+        toast.success("Event submitted for admin approval!");
+        navigate("/club-leader/dashboard");
+      } else {
+        toast.success("Event created successfully!");
+        navigate("/events");
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to create event. Please try again.");
       console.error("Error creating event:", error);
     } finally {
       setIsSubmitting(false);
@@ -158,14 +138,14 @@ const CreateEvent = () => {
   };
 
   const isFormValid = () => {
-    return formData.title && 
-           formData.description && 
-           formData.date && 
-           formData.time && 
-           formData.venue && 
+    return formData.title &&
+           formData.description &&
+           formData.date &&
+           formData.time &&
+           formData.venue &&
            formData.campus &&
-           formData.category && 
-           formData.organizer && 
+           formData.category &&
+           formData.organizer &&
            formData.capacity;
   };
 
@@ -173,21 +153,23 @@ const CreateEvent = () => {
     <Layout>
       <div className="container py-8">
         <div className="max-w-2xl mx-auto">
-          {/* Header */}
           <div className="mb-8">
-            <Button 
-              variant="ghost" 
-              onClick={() => navigate("/events")}
+            <Button
+              variant="ghost"
+              onClick={() => user?.role === "club_leader" ? navigate("/club-leader/dashboard") : navigate("/events")}
               className="mb-4"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Events
+              Back
             </Button>
             <h1 className="font-heading text-3xl font-bold text-foreground mb-2">Create New Event</h1>
-            <p className="text-muted-foreground">Submit your event for admin approval</p>
+            <p className="text-muted-foreground">
+              {user?.role === "club_leader"
+                ? "Submit your event for admin approval"
+                : "Create a new event for the campus"}
+            </p>
           </div>
 
-          {/* Form */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -195,12 +177,11 @@ const CreateEvent = () => {
                 Event Details
               </CardTitle>
               <CardDescription>
-                Fill in the details below to submit your event for review
+                Fill in the details below to {user?.role === "club_leader" ? "submit your event for review" : "create the event"}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Basic Information */}
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="title">Event Title *</Label>
@@ -210,6 +191,7 @@ const CreateEvent = () => {
                       onChange={(e) => handleInputChange("title", e.target.value)}
                       placeholder="Enter event title"
                       required
+                      minLength={3}
                     />
                   </div>
 
@@ -222,30 +204,28 @@ const CreateEvent = () => {
                       placeholder="Describe your event in detail"
                       rows={4}
                       required
+                      minLength={10}
                     />
                   </div>
                 </div>
 
-                {/* Date and Time */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="date" className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Date *
+                      <Calendar className="h-4 w-4" /> Date *
                     </Label>
                     <Input
                       id="date"
                       type="date"
                       value={formData.date}
                       onChange={(e) => handleInputChange("date", e.target.value)}
+                      min={new Date().toISOString().split("T")[0]}
                       required
                     />
                   </div>
-
                   <div>
                     <Label htmlFor="time" className="flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
-                      Time *
+                      <Clock className="h-4 w-4" /> Time *
                     </Label>
                     <Input
                       id="time"
@@ -257,62 +237,52 @@ const CreateEvent = () => {
                   </div>
                 </div>
 
-                {/* Location */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="venue" className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4" />
-                      Venue *
+                      <MapPin className="h-4 w-4" /> Venue *
                     </Label>
                     <Input
                       id="venue"
                       value={formData.venue}
                       onChange={(e) => handleInputChange("venue", e.target.value)}
-                      placeholder="Event location"
+                      placeholder="e.g. Main Hall, Room 101"
                       required
                     />
                   </div>
-
                   <div>
                     <Label htmlFor="campus">Campus *</Label>
-                    <Select onValueChange={(value) => handleInputChange("campus", value)}>
+                    <Select onValueChange={(value) => handleInputChange("campus", value)} value={formData.campus}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select campus" />
                       </SelectTrigger>
                       <SelectContent>
                         {campuses.map((campus) => (
-                          <SelectItem key={campus} value={campus}>
-                            {campus}
-                          </SelectItem>
+                          <SelectItem key={campus} value={campus}>{campus}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
 
-                {/* Category */}
                 <div>
                   <Label htmlFor="category">Category *</Label>
-                  <Select onValueChange={(value) => handleInputChange("category", value)}>
+                  <Select onValueChange={(value) => handleInputChange("category", value)} value={formData.category}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
                       {allSubCategories.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {cat}
-                        </SelectItem>
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Organizer and Capacity */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="organizer" className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      Organizer *
+                      <User className="h-4 w-4" /> Organizer *
                     </Label>
                     <Input
                       id="organizer"
@@ -322,7 +292,6 @@ const CreateEvent = () => {
                       required
                     />
                   </div>
-
                   <div>
                     <Label htmlFor="capacity">Expected Capacity *</Label>
                     <Input
@@ -332,25 +301,24 @@ const CreateEvent = () => {
                       onChange={(e) => handleInputChange("capacity", e.target.value)}
                       placeholder="Number of attendees"
                       min="1"
+                      max="10000"
                       required
                     />
                   </div>
                 </div>
 
-                {/* Event Flyer Upload */}
                 <div>
                   <Label className="flex items-center gap-2 mb-4">
                     <ImageIcon className="h-4 w-4" />
                     Event Flyer (Optional)
                   </Label>
-                  
+
                   {previewUrl ? (
-                    // File preview
                     <div className="relative">
                       <div className="border rounded-lg overflow-hidden">
-                        <img 
-                          src={previewUrl} 
-                          alt="Event flyer preview" 
+                        <img
+                          src={previewUrl}
+                          alt="Event flyer preview"
                           className="w-full h-64 object-cover"
                         />
                       </div>
@@ -358,25 +326,15 @@ const CreateEvent = () => {
                         <p className="text-sm text-gray-600">
                           {uploadedFile?.name} ({(uploadedFile?.size ? (uploadedFile.size / 1024 / 1024).toFixed(2) : '0')} MB)
                         </p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={removeFile}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <X className="h-4 w-4 mr-1" />
-                          Remove
+                        <Button type="button" variant="outline" size="sm" onClick={removeFile} className="text-red-600 hover:text-red-700">
+                          <X className="h-4 w-4 mr-1" /> Remove
                         </Button>
                       </div>
                     </div>
                   ) : (
-                    // Upload area
                     <div
                       className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                        isDragging
-                          ? "border-blue-500 bg-blue-50"
-                          : "border-gray-300 hover:border-gray-400"
+                        isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-gray-400"
                       }`}
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
@@ -386,19 +344,10 @@ const CreateEvent = () => {
                       <p className="text-lg font-medium text-gray-900 mb-2">
                         {isDragging ? "Drop your flyer here" : "Upload event flyer"}
                       </p>
-                      <p className="text-sm text-gray-500 mb-4">
-                        Drag and drop your flyer here, or click to browse
-                      </p>
-                      <p className="text-xs text-gray-400 mb-4">
-                        Supported formats: JPEG, PNG, GIF, WebP (Max 5MB)
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Choose File
+                      <p className="text-sm text-gray-500 mb-4">Drag and drop your flyer here, or click to browse</p>
+                      <p className="text-xs text-gray-400 mb-4">Supported: JPEG, PNG, GIF, WebP (Max 5MB)</p>
+                      <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                        <Upload className="h-4 w-4 mr-2" /> Choose File
                       </Button>
                       <input
                         ref={fileInputRef}
@@ -406,24 +355,22 @@ const CreateEvent = () => {
                         accept="image/*"
                         onChange={handleFileSelect}
                         className="hidden"
+                        title="Upload event flyer"
+                        aria-label="Upload event flyer"
                       />
                     </div>
                   )}
                 </div>
 
-                {/* Submit Button */}
                 <div className="flex justify-end space-x-4 pt-4">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => navigate("/events")}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => user?.role === "club_leader" ? navigate("/club-leader/dashboard") : navigate("/events")}
                   >
                     Cancel
                   </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={!isFormValid() || isSubmitting}
-                  >
+                  <Button type="submit" disabled={!isFormValid() || isSubmitting}>
                     {isSubmitting ? (
                       <>
                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
@@ -432,7 +379,7 @@ const CreateEvent = () => {
                     ) : (
                       <>
                         <Send className="mr-2 h-4 w-4" />
-                        Submit for Approval
+                        {user?.role === "club_leader" ? "Submit for Approval" : "Create Event"}
                       </>
                     )}
                   </Button>

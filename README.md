@@ -18,11 +18,13 @@ A comprehensive campus events management platform for Zetech University, built w
 ## 🛠️ Technologies Used
 
 ### Core Framework
+
 - **Frontend**: React 18 with TypeScript
 - **Build Tool**: Vite
 - **Package Manager**: npm/Bun
 
 ### UI & Styling
+
 - **Styling**: Tailwind CSS with custom theme
 - **UI Components**: shadcn/ui (Radix UI based)
 - **Icons**: Lucide React & React Icons
@@ -30,16 +32,19 @@ A comprehensive campus events management platform for Zetech University, built w
 - **Typography**: Tailwind CSS Typography plugin
 
 ### State Management & Data
+
 - **State Management**: React Query (TanStack Query)
 - **Server State**: Supabase client
 - **Form Handling**: React Hook Form with Zod validation
 - **Data Fetching**: TanStack Query with caching
 
 ### Routing & Navigation
+
 - **Routing**: React Router DOM v6
 - **Navigation**: Radix UI Navigation Menu
 
 ### UI Components & Interactions
+
 - **Dialogs**: Radix UI Dialog & Alert Dialog
 - **Forms**: Radix UI components (Label, Checkbox, Radio Group, Select)
 - **Navigation**: Radix UI Navigation Menu, Menubar, Tabs
@@ -50,22 +55,25 @@ A comprehensive campus events management platform for Zetech University, built w
 - **Utilities**: Class Variance Authority, clsx, tailwind-merge
 
 ### Data Visualization
+
 - **Charts**: Recharts
 - **Date Handling**: date-fns
 - **Calendar**: React Day Picker
 
-### Development & Testing
-- **Testing**: Vitest with React Testing Library
+### Development
+
 - **Linting**: ESLint with React plugins
 - **Type Checking**: TypeScript
 - **Build Tools**: Vite with SWC compilation
 
 ### Database & Backend
+
 - **Database**: Supabase (PostgreSQL)
 - **Authentication**: Supabase Auth
 - **Real-time**: Supabase Realtime subscriptions
 
 ### Additional Libraries
+
 - **Carousels**: Embla Carousel React
 - **Command Palette**: cmdk
 - **Themes**: next-themes for dark mode
@@ -87,43 +95,48 @@ Before you begin, ensure you have the following installed:
 Follow these steps to set up the project locally:
 
 1. **Clone the repository**
+
    ```bash
    git clone <your-repository-url>
    cd zetech-event-hub-main
    ```
 
 2. **Install dependencies**
+
    ```bash
    # Using npm
    npm install
-   
+
    # Using yarn
    yarn install
-   
+
    # Using bun
    bun install
    ```
 
 3. **Set up environment variables**
+
    ```bash
    cp .env.example .env
    # Edit .env with your Supabase configuration
    ```
-   
+
    Required environment variables:
+
    ```env
    VITE_SUPABASE_URL=your_supabase_project_url
    VITE_SUPABASE_ANON_KEY=your_supabase_anonymous_key
    ```
 
 4. **Start the development server**
+
    ```bash
    # Using npm
    npm run dev
-   
+
    # Using yarn
    yarn dev
-   
+
    # Using bun
    bun dev
    ```
@@ -161,7 +174,7 @@ zetech-event-hub-main/
 │   ├── data/             # Static data and mock data
 │   │   └── events.ts     # Sample events data
 │   ├── integrations/     # Third-party integrations
-│   ├── test/             # Test files and utilities
+│   ├── test/             # (removed) Test files and utilities
 │   ├── assets/           # React assets (images, etc.)
 │   ├── App.tsx           # Main App component
 │   ├── main.tsx          # Application entry point
@@ -183,19 +196,20 @@ zetech-event-hub-main/
 ## 🛠️ Available Scripts
 
 ### Development
+
 - `npm run dev` - Start development server with hot reload
 - `npm run build` - Build for production
 - `npm run build:dev` - Build for development mode
 - `npm run preview` - Preview production build locally
 
 ### Quality Assurance
+
 - `npm run lint` - Run ESLint for code quality checks
-- `npm run test` - Run test suite with Vitest
-- `npm run test:watch` - Run tests in watch mode for development
 
 ## 🎨 Customization
 
 ### Theming
+
 The application uses Tailwind CSS with a custom dark theme. You can modify the theme in `tailwind.config.ts`:
 
 ```typescript
@@ -208,13 +222,14 @@ export default {
         border: "hsl(var(--border))",
         background: "hsl(var(--background))",
         // ... more color definitions
-      }
-    }
-  }
-}
+      },
+    },
+  },
+};
 ```
 
 ### Components
+
 UI components are built using shadcn/ui. You can find components in the `src/components/ui` directory. To add new components:
 
 ```bash
@@ -222,16 +237,20 @@ npx shadcn-ui@latest add [component-name]
 ```
 
 ### Environment Variables
+
 Key environment variables:
+
 - `VITE_SUPABASE_URL` - Your Supabase project URL
 - `VITE_SUPABASE_ANON_KEY` - Your Supabase anonymous key
 
 ### Adding New Pages
+
 1. Create a new component in `src/pages/`
 2. Add the route in `src/App.tsx`
 3. Update navigation in `src/components/Layout.tsx`
 
 ### Database Schema
+
 Database migrations are stored in the `supabase/migrations/` directory. To create new migrations:
 
 ```sql
@@ -242,6 +261,7 @@ Database migrations are stored in the `supabase/migrations/` directory. To creat
 ## 🚀 Deployment
 
 ### Building for Production
+
 ```bash
 npm run build
 ```
@@ -249,6 +269,7 @@ npm run build
 The build artifacts will be stored in the `dist/` directory.
 
 ### Deploying to Vercel
+
 1. Connect your repository to Vercel
 2. Set environment variables in Vercel dashboard:
    - `VITE_SUPABASE_URL`
@@ -256,18 +277,21 @@ The build artifacts will be stored in the `dist/` directory.
 3. Deploy automatically on push to main branch
 
 ### Deploying to Netlify
+
 1. Connect your repository to Netlify
 2. Set build command: `npm run build`
 3. Set publish directory: `dist`
 4. Set environment variables in Netlify dashboard
 
 ### Deploying to Railway/Render
+
 1. Connect your repository
 2. Set build command: `npm run build`
 3. Set start command: `npm run preview` or use static site deployment
 4. Configure environment variables
 
 ### Docker Deployment
+
 ```dockerfile
 FROM node:18-alpine as builder
 WORKDIR /app
@@ -288,38 +312,42 @@ CMD ["nginx", "-g", "daemon off;"]
 We welcome contributions! Please follow these steps:
 
 1. **Fork the repository**
+
    ```bash
    git fork https://github.com/your-username/zetech-event-hub.git
    ```
 
 2. **Clone your fork**
+
    ```bash
    git clone https://github.com/your-username/zetech-event-hub.git
    cd zetech-event-hub
    ```
 
 3. **Create a feature branch**
+
    ```bash
    git checkout -b feature/amazing-feature
    ```
 
 4. **Make your changes**
    - Follow the existing code style
-   - Add tests for new features
    - Update documentation as needed
 
-5. **Run tests and linting**
+5. **Run linting**
+
    ```bash
    npm run lint
-   npm run test
    ```
 
 6. **Commit your changes**
+
    ```bash
    git commit -m 'feat: add amazing feature'
    ```
 
 7. **Push to your fork**
+
    ```bash
    git push origin feature/amazing-feature
    ```
@@ -330,6 +358,7 @@ We welcome contributions! Please follow these steps:
    - Ensure CI checks pass
 
 ### Code Style Guidelines
+
 - Use TypeScript for all new code
 - Follow the existing component structure
 - Use Tailwind CSS for styling
@@ -365,6 +394,7 @@ If you encounter any issues or have questions:
 ## 🎯 Roadmap
 
 ### Current Development
+
 - [x] Basic event discovery and registration
 - [x] User authentication with Supabase
 - [x] Responsive design with Tailwind CSS
@@ -372,6 +402,7 @@ If you encounter any issues or have questions:
 - [x] Social media integration (WhatsApp sharing)
 
 ### Upcoming Features (Q1 2024)
+
 - [ ] **Mobile App Development**
   - React Native app for iOS and Android
   - Push notifications for event reminders
@@ -390,6 +421,7 @@ If you encounter any issues or have questions:
   - Refund management
 
 ### Future Enhancements (Q2-Q3 2024)
+
 - [ ] **Student Information System Integration**
   - Automatic student verification
   - Academic calendar integration
@@ -411,6 +443,7 @@ If you encounter any issues or have questions:
   - Volunteer coordination system
 
 ### Long-term Vision (2024+)
+
 - [ ] Multi-campus support
 - [ ] Event livestreaming capabilities
 - [ ] Sponsor and vendor management

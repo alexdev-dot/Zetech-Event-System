@@ -6,7 +6,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
-import { LogIn, Shield, GraduationCap, ArrowLeft, Eye, EyeOff, UserPlus, Lock, Mail, Users } from "lucide-react";
+import {
+  LogIn,
+  Shield,
+  GraduationCap,
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  UserPlus,
+  Lock,
+  Mail,
+  Users,
+} from "lucide-react";
 import zetechLogo from "@/assets/zetech-logo.png";
 
 type RoleType = "student" | "admin" | "club_leader";
@@ -27,7 +38,8 @@ const Auth = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const navigate = useNavigate();
-  const { user, loading, signIn, createStudentAccount, adminSignIn } = useAuth();
+  const { user, loading, signIn, createStudentAccount, adminSignIn } =
+    useAuth();
 
   useEffect(() => {
     if (!loading && user) {
@@ -41,18 +53,35 @@ const Auth = () => {
     e.preventDefault();
     setLoadingForm(true);
     try {
-      if (!firstName.trim() || !lastName.trim()) throw new Error("First and last name are required");
+      if (!firstName.trim() || !lastName.trim())
+        throw new Error("First and last name are required");
       if (!studentEmail.trim()) throw new Error("Email address is required");
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(studentEmail)) throw new Error("Please enter a valid email address");
+      if (!emailRegex.test(studentEmail))
+        throw new Error("Please enter a valid email address");
       if (!identifier.trim()) throw new Error("Admission number is required");
-      if (newStudentPassword.length < 6) throw new Error("Password must be at least 6 characters");
-      if (newStudentPassword !== confirmPassword) throw new Error("Passwords do not match");
+      if (newStudentPassword.length < 6)
+        throw new Error("Password must be at least 6 characters");
+      if (newStudentPassword !== confirmPassword)
+        throw new Error("Passwords do not match");
 
-      await createStudentAccount(firstName.trim(), lastName.trim(), studentEmail.trim(), identifier.trim(), newStudentPassword);
-      toast({ title: "Account Created!", description: "Welcome to Zetech Events Hub." });
+      await createStudentAccount(
+        firstName.trim(),
+        lastName.trim(),
+        studentEmail.trim(),
+        identifier.trim(),
+        newStudentPassword,
+      );
+      toast({
+        title: "Account Created!",
+        description: "Welcome to Zetech Events Hub.",
+      });
     } catch (error: any) {
-      toast({ title: "Registration Error", description: error.message || "Failed to create account", variant: "destructive" });
+      toast({
+        title: "Registration Error",
+        description: error.message || "Failed to create account",
+        variant: "destructive",
+      });
     } finally {
       setLoadingForm(false);
     }
@@ -62,7 +91,8 @@ const Auth = () => {
     e.preventDefault();
     setLoadingForm(true);
     try {
-      if (!identifier.trim() || !password) throw new Error("All fields are required");
+      if (!identifier.trim() || !password)
+        throw new Error("All fields are required");
 
       if (role === "student") {
         await signIn(identifier.trim(), password);
@@ -75,7 +105,11 @@ const Auth = () => {
         // redirect handled by useEffect above
       }
     } catch (error: any) {
-      toast({ title: "Login Failed", description: error.message || "Invalid credentials", variant: "destructive" });
+      toast({
+        title: "Login Failed",
+        description: error.message || "Invalid credentials",
+        variant: "destructive",
+      });
     } finally {
       setLoadingForm(false);
     }
@@ -106,17 +140,29 @@ const Auth = () => {
       {/* Left panel — form */}
       <div className="flex-1 flex flex-col justify-center items-center px-6 py-12">
         <div className="w-full max-w-md">
-          <Button variant="ghost" onClick={() => navigate("/")} className="mb-6 text-gray-600">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/")}
+            className="mb-6 text-gray-600"
+          >
             <ArrowLeft className="w-4 h-4 mr-2" /> Go home
           </Button>
 
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
             {/* Logo */}
             <div className="text-center mb-8">
-              <img src={zetechLogo} alt="Zetech University" className="w-16 h-16 mx-auto mb-3 object-contain" />
-              <h1 className="text-2xl font-bold text-gray-800">Zetech Events Hub</h1>
+              <img
+                src={zetechLogo}
+                alt="Zetech University"
+                className="w-16 h-16 mx-auto mb-3 object-contain"
+              />
+              <h1 className="text-2xl font-bold text-gray-800">
+                Zetech Events Hub
+              </h1>
               <p className="text-sm text-gray-500 mt-1">
-                {isNewStudent ? "Create your student account" : "Sign in to access campus events"}
+                {isNewStudent
+                  ? "Create your student account"
+                  : "Sign in to access campus events"}
               </p>
             </div>
 
@@ -127,7 +173,11 @@ const Auth = () => {
               </span>
               <Button
                 variant="link"
-                onClick={() => { setIsNewStudent(!isNewStudent); setIdentifier(""); setPassword(""); }}
+                onClick={() => {
+                  setIsNewStudent(!isNewStudent);
+                  setIdentifier("");
+                  setPassword("");
+                }}
                 className="text-blue-600 p-0 h-auto font-medium text-sm"
               >
                 {isNewStudent ? "Sign In" : "Create Account"}
@@ -137,41 +187,61 @@ const Auth = () => {
             {/* Role selector — login only */}
             {!isNewStudent && (
               <div className="mb-6">
-                <Label className="text-sm font-medium text-gray-700 mb-3 block">Sign in as</Label>
+                <Label className="text-sm font-medium text-gray-700 mb-3 block">
+                  Sign in as
+                </Label>
                 <RadioGroup
                   value={role}
-                  onValueChange={(v) => { setRole(v as RoleType); setIdentifier(""); }}
+                  onValueChange={(v) => {
+                    setRole(v as RoleType);
+                    setIdentifier("");
+                  }}
                   className="space-y-2"
                 >
                   <div className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                     <RadioGroupItem value="student" id="role-student" />
-                    <Label htmlFor="role-student" className="flex items-center gap-2 cursor-pointer flex-1">
+                    <Label
+                      htmlFor="role-student"
+                      className="flex items-center gap-2 cursor-pointer flex-1"
+                    >
                       <GraduationCap className="w-4 h-4 text-blue-600" />
                       <div>
                         <div className="font-medium text-sm">Student</div>
-                        <div className="text-xs text-gray-500">Discover and register for events</div>
+                        <div className="text-xs text-gray-500">
+                          Discover and register for events
+                        </div>
                       </div>
                     </Label>
                   </div>
 
                   <div className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                     <RadioGroupItem value="admin" id="role-admin" />
-                    <Label htmlFor="role-admin" className="flex items-center gap-2 cursor-pointer flex-1">
+                    <Label
+                      htmlFor="role-admin"
+                      className="flex items-center gap-2 cursor-pointer flex-1"
+                    >
                       <Shield className="w-4 h-4 text-red-600" />
                       <div>
                         <div className="font-medium text-sm">Administrator</div>
-                        <div className="text-xs text-gray-500">Manage events and system</div>
+                        <div className="text-xs text-gray-500">
+                          Manage events and system
+                        </div>
                       </div>
                     </Label>
                   </div>
 
                   <div className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                     <RadioGroupItem value="club_leader" id="role-club-leader" />
-                    <Label htmlFor="role-club-leader" className="flex items-center gap-2 cursor-pointer flex-1">
+                    <Label
+                      htmlFor="role-club-leader"
+                      className="flex items-center gap-2 cursor-pointer flex-1"
+                    >
                       <Users className="w-4 h-4 text-green-600" />
                       <div>
                         <div className="font-medium text-sm">Club Leader</div>
-                        <div className="text-xs text-gray-500">Manage your club's events</div>
+                        <div className="text-xs text-gray-500">
+                          Manage your club's events
+                        </div>
                       </div>
                     </Label>
                   </div>
@@ -183,7 +253,10 @@ const Auth = () => {
             {!isNewStudent ? (
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <Label htmlFor="identifier" className="text-sm font-medium text-gray-700 mb-1 block">
+                  <Label
+                    htmlFor="identifier"
+                    className="text-sm font-medium text-gray-700 mb-1 block"
+                  >
                     {identifierLabel[role]}
                   </Label>
                   <Input
@@ -198,7 +271,12 @@ const Auth = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="password" className="text-sm font-medium text-gray-700 mb-1 block">Password</Label>
+                  <Label
+                    htmlFor="password"
+                    className="text-sm font-medium text-gray-700 mb-1 block"
+                  >
+                    Password
+                  </Label>
                   <div className="relative">
                     <Input
                       id="password"
@@ -214,9 +292,15 @@ const Auth = () => {
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
                     >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -239,7 +323,12 @@ const Auth = () => {
               <form onSubmit={handleCreateStudentAccount} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="firstName" className="text-sm font-medium text-gray-700 mb-1 block">First Name</Label>
+                    <Label
+                      htmlFor="firstName"
+                      className="text-sm font-medium text-gray-700 mb-1 block"
+                    >
+                      First Name
+                    </Label>
                     <Input
                       id="firstName"
                       value={firstName}
@@ -249,7 +338,12 @@ const Auth = () => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="lastName" className="text-sm font-medium text-gray-700 mb-1 block">Last Name</Label>
+                    <Label
+                      htmlFor="lastName"
+                      className="text-sm font-medium text-gray-700 mb-1 block"
+                    >
+                      Last Name
+                    </Label>
                     <Input
                       id="lastName"
                       value={lastName}
@@ -261,7 +355,12 @@ const Auth = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="regAdmission" className="text-sm font-medium text-gray-700 mb-1 block">Admission Number</Label>
+                  <Label
+                    htmlFor="regAdmission"
+                    className="text-sm font-medium text-gray-700 mb-1 block"
+                  >
+                    Admission Number
+                  </Label>
                   <Input
                     id="regAdmission"
                     value={identifier}
@@ -272,7 +371,12 @@ const Auth = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="studentEmail" className="text-sm font-medium text-gray-700 mb-1 block">Email Address</Label>
+                  <Label
+                    htmlFor="studentEmail"
+                    className="text-sm font-medium text-gray-700 mb-1 block"
+                  >
+                    Email Address
+                  </Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <Input
@@ -288,7 +392,12 @@ const Auth = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="regPassword" className="text-sm font-medium text-gray-700 mb-1 block">Password</Label>
+                  <Label
+                    htmlFor="regPassword"
+                    className="text-sm font-medium text-gray-700 mb-1 block"
+                  >
+                    Password
+                  </Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <Input
@@ -306,13 +415,22 @@ const Auth = () => {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700 mb-1 block">Confirm Password</Label>
+                  <Label
+                    htmlFor="confirmPassword"
+                    className="text-sm font-medium text-gray-700 mb-1 block"
+                  >
+                    Confirm Password
+                  </Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <Input
@@ -344,11 +462,21 @@ const Auth = () => {
             )}
 
             <div className="mt-6 text-center text-sm text-gray-400 space-x-4">
-              <a href="https://elearning.zetech.ac.ke/login/forgot_password.php" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600">
+              <a
+                href="https://elearning.zetech.ac.ke/login/forgot_password.php"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-gray-600"
+              >
                 Forgot Password?
               </a>
               <span>·</span>
-              <a href="https://zetech.ac.ke" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600">
+              <a
+                href="https://zetech.ac.ke"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-gray-600"
+              >
                 Zetech Website
               </a>
             </div>
@@ -356,16 +484,46 @@ const Auth = () => {
         </div>
       </div>
 
-      {/* Right panel — campus photo (hidden on mobile) */}
-      <div className="hidden lg:block w-1/2 relative overflow-hidden">
-        <img
-          src="https://www.zetech.ac.ke/images/campuses/Ruiru_Campus.png"
-          alt="Zetech University Campus"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent flex flex-col justify-end p-12">
-          <h2 className="text-white text-3xl font-bold mb-2">Zetech Events Hub</h2>
-          <p className="text-white/80 text-lg">Discover, register, and participate in campus events</p>
+      {/* Right panel — two images (hidden on mobile) */}
+      <div className="hidden lg:flex w-2/5 rounded-r-2xl overflow-hidden">
+        <div className="flex-1 grid grid-rows-2 gap-2 h-full">
+          <div className="relative overflow-hidden">
+            <img
+              src="https://www.zetech.ac.ke/images/students-gallery/1K1A1621.JPG"
+              alt="Login image 1"
+              className="w-full h-full object-cover absolute inset-0"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent flex items-end p-6">
+              <div>
+                <h3 className="text-white text-xl font-semibold">
+                  Campus Community
+                </h3>
+                <p className="text-white/80 text-sm">
+                  Join clubs, meet peers, and make the most of your time at
+                  Zetech
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden">
+            <img
+              src="https://www.zetech.ac.ke/images/students-gallery/1K1A1386.JPG"
+              alt="Login image 2"
+              className="w-full h-full object-cover absolute inset-0"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent flex items-end p-6">
+              <div>
+                <h3 className="text-white text-xl font-semibold">
+                  Student life at Zetech
+                </h3>
+                <p className="text-white/80 text-sm">
+                  Experience vibrant campus events, worshops, and activities
+                  that enrich your university journey
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

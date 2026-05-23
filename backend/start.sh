@@ -1,2 +1,4 @@
 #!/bin/sh
-exec node /home/runner/workspace/backend/server.js
+# Start backend from repository root in production
+cd "$(dirname "$0")" || exit 1
+exec node server.js

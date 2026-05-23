@@ -1,13 +1,13 @@
-const API_BASE_URL = '/api';
+const API_BASE_URL = "/api";
 
 function getToken(): string | null {
-  return localStorage.getItem('authToken');
+  return localStorage.getItem("authToken");
 }
 
 function authHeaders(): Record<string, string> {
   const token = getToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
 }
 
@@ -29,22 +29,22 @@ export const api = {
       password: string;
     }) =>
       fetch(`${API_BASE_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }).then(handleResponse),
 
     login: (admissionNumber: string, password: string) =>
       fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ admissionNumber, password }),
       }).then(handleResponse),
 
     adminLogin: (email: string, password: string) =>
       fetch(`${API_BASE_URL}/auth/admin/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       }).then(handleResponse),
 
@@ -57,49 +57,49 @@ export const api = {
   events: {
     getAll: () =>
       fetch(`${API_BASE_URL}/events`, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { "Content-Type": "application/json" },
       }).then(handleResponse),
 
     getRecent: (limit = 12) =>
       fetch(`${API_BASE_URL}/events/recent?limit=${limit}`, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { "Content-Type": "application/json" },
       }).then(handleResponse),
 
     getById: (id: string) =>
       fetch(`${API_BASE_URL}/events/${id}`, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { "Content-Type": "application/json" },
       }).then(handleResponse),
 
     create: (data: any) =>
       fetch(`${API_BASE_URL}/events`, {
-        method: 'POST',
-        headers: authHeaders(),
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }).then(handleResponse),
 
     update: (id: string, data: any) =>
       fetch(`${API_BASE_URL}/events/${id}`, {
-        method: 'PUT',
-        headers: authHeaders(),
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }).then(handleResponse),
 
     delete: (id: string) =>
       fetch(`${API_BASE_URL}/events/${id}`, {
-        method: 'DELETE',
+        method: "DELETE",
         headers: authHeaders(),
       }).then(handleResponse),
 
     register: (eventId: string, _studentId?: string | number) =>
       fetch(`${API_BASE_URL}/events/${eventId}/register`, {
-        method: 'POST',
-        headers: authHeaders(),
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({}),
       }).then(handleResponse),
 
     cancelRegistration: (eventId: string, studentId: string | number) =>
       fetch(`${API_BASE_URL}/events/${eventId}/register/${studentId}`, {
-        method: 'DELETE',
+        method: "DELETE",
         headers: authHeaders(),
       }).then(handleResponse),
   },
@@ -129,13 +129,13 @@ export const api = {
 
     approveEvent: (id: string | number) =>
       fetch(`${API_BASE_URL}/admin/events/${id}/approve`, {
-        method: 'PATCH',
+        method: "PATCH",
         headers: authHeaders(),
       }).then(handleResponse),
 
     rejectEvent: (id: string | number) =>
       fetch(`${API_BASE_URL}/admin/events/${id}/reject`, {
-        method: 'PATCH',
+        method: "PATCH",
         headers: authHeaders(),
       }).then(handleResponse),
 
@@ -144,14 +144,27 @@ export const api = {
         headers: authHeaders(),
       }).then(handleResponse),
 
-    getStudents: () =>
-      fetch(`${API_BASE_URL}/admin/students`, {
+    getStudents: (params?: { page?: number; limit?: number; search?: string }) => {
+      const qp = new URLSearchParams();
+      if (params?.page) qp.set("page", String(params.page));
+      if (params?.limit) qp.set("limit", String(params.limit));
+      if (params?.search) qp.set("search", params.search);
+      const qs = qp.toString();
+      return fetch(`${API_BASE_URL}/admin/students${qs ? `?${qs}` : ""}`, {
         headers: authHeaders(),
+      }).then(handleResponse);
+    },
+
+    updateStudentStatus: (studentId: string | number, status: "active" | "deleted") =>
+      fetch(`${API_BASE_URL}/admin/students/${studentId}/status`, {
+        method: "PATCH",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
       }).then(handleResponse),
 
     deleteStudent: (studentId: string) =>
       fetch(`${API_BASE_URL}/admin/students/${studentId}`, {
-        method: 'DELETE',
+        method: "DELETE",
         headers: authHeaders(),
       }).then(handleResponse),
 
@@ -162,8 +175,8 @@ export const api = {
       confirmNewPassword?: string;
     }) =>
       fetch(`${API_BASE_URL}/admin/account`, {
-        method: 'PUT',
-        headers: authHeaders(),
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }).then(handleResponse),
 
@@ -191,17 +204,50 @@ export const api = {
         headers: authHeaders(),
       }).then(handleResponse),
 
-    createClubLeader: (data: { email: string; password: string; name: string; club: string }) =>
+    createClubLeader: (data: {
+      email: string;
+      password: string;
+      name: string;
+      club: string;
+    }) =>
       fetch(`${API_BASE_URL}/admin/club-leaders`, {
-        method: 'POST',
-        headers: authHeaders(),
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }).then(handleResponse),
 
     deleteClubLeader: (id: string | number) =>
       fetch(`${API_BASE_URL}/admin/club-leaders/${id}`, {
-        method: 'DELETE',
+        method: "DELETE",
         headers: authHeaders(),
+      }).then(handleResponse),
+
+    // System settings
+    getSettings: () =>
+      fetch(`${API_BASE_URL}/admin/settings`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+
+    updateSettings: (settings: Record<string, string>) =>
+      fetch(`${API_BASE_URL}/admin/settings`, {
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      }).then(handleResponse),
+
+    // SMS
+    sendSMS: (data: { message: string; targetGroup?: string; recipients?: string[] }) =>
+      fetch(`${API_BASE_URL}/admin/sms/send`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).then(handleResponse),
+
+    sendEventSMS: (eventId: string | number, message: string) =>
+      fetch(`${API_BASE_URL}/admin/sms/event/${eventId}`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
       }).then(handleResponse),
   },
 
@@ -216,12 +262,28 @@ export const api = {
         headers: authHeaders(),
       }).then(handleResponse),
 
-    updateAccount: (data: { currentPassword: string; newPassword: string; confirmNewPassword: string }) =>
+    updateAccount: (data: {
+      currentPassword: string;
+      newPassword: string;
+      confirmNewPassword: string;
+    }) =>
       fetch(`${API_BASE_URL}/club-leader/account`, {
-        method: 'PUT',
-        headers: authHeaders(),
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }).then(handleResponse),
+  },
+
+  upload: {
+    image: (file: File) => {
+      const formData = new FormData();
+      formData.append("image", file);
+      return fetch(`${API_BASE_URL}/upload`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: formData,
+      }).then(handleResponse);
+    },
   },
 
   health: () => fetch(`${API_BASE_URL}/health`).then(handleResponse),

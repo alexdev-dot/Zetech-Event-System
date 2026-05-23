@@ -1,15 +1,41 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+
 import Layout from "@/components/Layout";
 import EventCard from "@/components/EventCard";
 import { categories, allSubCategories, type Event } from "@/data/events";
 import { api } from "@/lib/api";
-import { Search, Plus, Filter, Calendar, MapPin, Sparkles, TrendingUp } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Filter,
+  Calendar,
+  MapPin,
+  Sparkles,
+  TrendingUp,
+} from "lucide-react";
+import { useSocket } from "@/contexts/SocketContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
+
+// Backend event shape returned by the API
+type BackendEvent = {
+  id: number | string;
+  title?: string;
+  description?: string;
+  date?: string;
+  time?: string;
+  location?: string;
+  image_url?: string | null;
+  status?: string;
+  registered_count?: number;
+  max_participants?: number | null;
+  created_by_email?: string | null;
+  category?: string;
+};
 
 const Events = () => {
   const [search, setSearch] = useState("");
@@ -21,97 +47,104 @@ const Events = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    // Load events from API
-    const loadEvents = async () => {
-      setIsLoading(true);
-      try {
-        const eventsData = await api.events.getAll();
-        // Transform API data to match frontend Event interface
-        const transformedEvents = eventsData.map((event: any) => ({
-          id: event.id.toString(),
-          title: event.title,
-          description: event.description,
-          date: event.date,
-          time: event.time,
-          venue: event.location,
-          campus: "Main Campus", // Default value, can be updated later
-          posterUrl: event.image_url || "",
-          status: event.status === "upcoming" ? "approved" as const : "pending" as const,
-          registrations: event.registered_count || 0,
-          capacity: event.max_participants || 0,
-          organizer: event.created_by_email || "Admin",
-          category: event.category,
-          featured: false
-        }));
-        setAllEvents(transformedEvents);
-      } catch (error) {
-        console.error("Failed to load events:", error);
-        // Fallback to empty array if API fails
-        setAllEvents([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const { socket } = useSocket();
 
-    // Initial load
-    loadEvents();
+  const loadEvents = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const eventsData = await api.events.getAll();
+      const transformedEvents: Event[] = (eventsData || []).map(
+        (event: BackendEvent) => ({
+          id: String(event.id),
+          title: event.title || "",
+          description: event.description || "",
+          date: event.date || "",
+          time: event.time || "",
+          venue: event.location || "",
+          campus: "Main Campus",
+          posterUrl: event.image_url || "",
+          status: ["upcoming", "ongoing", "completed"].includes(
+            event.status || "",
+          )
+            ? "approved"
+            : "pending",
+          registrations: event.registered_count || 0,
+          capacity: event.max_participants ?? 0,
+          organizer: event.created_by_email || "Admin",
+          category: event.category || "",
+          featured: false,
+        }),
+      );
+      setAllEvents(transformedEvents);
+    } catch (error) {
+      console.error("Failed to load events:", error);
+      setAllEvents([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onApproved = (data: any) => {
+      // reload events when a new event is approved
+      loadEvents();
+    };
+    socket.on("event:approved", onApproved);
+    return () => {
+      socket.off("event:approved", onApproved);
+    };
+  }, [socket, loadEvents]);
+
   const filtered = allEvents.filter((e) => {
-    const matchSearch = e.title.toLowerCase().includes(search.toLowerCase()) ||
-      e.venue.toLowerCase().includes(search.toLowerCase()) ||
-      e.description.toLowerCase().includes(search.toLowerCase());
-    
+    const q = search.toLowerCase();
+    const matchSearch =
+      e.title.toLowerCase().includes(q) ||
+      e.venue.toLowerCase().includes(q) ||
+      e.description.toLowerCase().includes(q);
+
     let matchCategory = activeCategory === "All";
-    
     if (activeCategory !== "All") {
-      // Check if activeCategory is a main category
-      const mainCategory = categories.find(cat => cat.name === activeCategory);
-      if (mainCategory) {
-        // If it's a main category, check if event category is in its sub-categories
+      const mainCategory = categories.find(
+        (cat) => cat.name === activeCategory,
+      );
+      if (mainCategory)
         matchCategory = mainCategory.subCategories.includes(e.category);
-      } else {
-        // If it's a sub-category, check for exact match
-        matchCategory = e.category === activeCategory;
-      }
+      else matchCategory = e.category === activeCategory;
     }
-    
-    const matchStatus = e.status === "approved"; // Only show approved events
+
+    const matchStatus = e.status === "approved";
     return matchSearch && matchCategory && matchStatus;
   });
 
-  const upcomingEvents = filtered.filter(e => new Date(e.date) >= new Date()).slice(0, 3);
-  const todayEvents = filtered.filter(e => {
-    const today = new Date();
-    const eventDate = new Date(e.date);
-    return eventDate.toDateString() === today.toDateString();
-  });
+  const upcomingEvents = filtered
+    .filter((e) => new Date(e.date) >= new Date())
+    .slice(0, 3);
+  const todayEvents = filtered.filter(
+    (e) => new Date(e.date).toDateString() === new Date().toDateString(),
+  );
 
   return (
     <Layout>
-      {/* Enhanced Hero Section */}
       <div className="hero-gradient py-8 relative min-h-[300px] overflow-hidden">
         <div className="absolute inset-0">
-          <img 
-            src="https://www.zetech.ac.ke/images/students-gallery/1K1A1822.JPG" 
-            alt="Zetech University Students" 
-            className="w-full h-full object-cover object-center"
+          <img
+            src="https://www.zetech.ac.ke/images/students-gallery/1K1A1822.JPG"
+            alt="Zetech University Students"
+            className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-110 filter brightness-90 contrast-110 scale-105 origin-center"
             loading="eager"
-            style={{
-              filter: 'brightness(0.9) contrast(1.1)',
-              transform: 'scale(1.05)',
-              transformOrigin: 'center'
-            }}
           />
           <div className="absolute inset-0 bg-gradient-to-r from-primary/90 via-primary/70 to-transparent"></div>
           <div className="absolute inset-0 bg-black/20"></div>
         </div>
-        
-        {/* Floating elements */}
+
         <div className="absolute top-10 left-10 w-20 h-20 bg-white/10 rounded-full blur-2xl animate-pulse"></div>
         <div className="absolute bottom-10 right-10 w-32 h-32 bg-white/5 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        
+
         <div className="container relative z-10">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 mb-4">
@@ -120,67 +153,62 @@ const Events = () => {
                 {filtered.length} Events Available
               </Badge>
             </div>
+
             <h1 className="font-heading text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-4 leading-tight">
               Discover Campus Events
             </h1>
             <p className="text-xl text-white/90 mb-8 max-w-2xl">
-              Explore exciting opportunities, connect with fellow students, and make lasting memories at Zetech University
+              Explore exciting opportunities, connect with fellow students, and
+              make lasting memories at Zetech University
             </p>
-            
-            {/* Quick Stats */}
+
             <div className="flex flex-wrap gap-6 mb-8">
               <div className="flex items-center gap-2 text-white">
                 <Calendar className="w-5 h-5" />
-                <span className="font-semibold">{todayEvents.length} Today</span>
+                <span className="font-semibold">
+                  {todayEvents.length} Today
+                </span>
               </div>
               <div className="flex items-center gap-2 text-white">
                 <TrendingUp className="w-5 h-5" />
-                <span className="font-semibold">{upcomingEvents.length} This Week</span>
+                <span className="font-semibold">
+                  {upcomingEvents.length} This Week
+                </span>
               </div>
               <div className="flex items-center gap-2 text-white">
                 <MapPin className="w-5 h-5" />
                 <span className="font-semibold">3 Campuses</span>
               </div>
             </div>
-
-                      </div>
+          </div>
         </div>
       </div>
 
       <div className="container py-8">
-        {/* Enhanced Header Section */}
         <div className="mb-8">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 mb-6">
             <div>
-              <h2 className="font-heading text-3xl font-bold text-foreground mb-2">All Events</h2>
-              <p className="text-muted-foreground text-lg">Discover and participate in amazing campus events</p>
+              <h2 className="font-heading text-3xl font-bold text-foreground mb-2">
+                All Events
+              </h2>
+              <p className="text-muted-foreground text-lg">
+                Discover and participate in amazing campus events
+              </p>
             </div>
+
             <div className="flex items-center gap-3">
-              {user && (
-                <Button 
-                  onClick={() => navigate("/create-event")} 
+              {user && user.role === "club_leader" && (
+                <Button
+                  onClick={() => navigate("/create-event")}
                   size="default"
                   className="bg-primary text-primary-foreground hover:bg-primary/90 font-medium px-4 py-2 flex items-center gap-2"
                 >
-                  <Plus className="h-4 w-4" />
-                  Create Event
+                  <Plus className="h-4 w-4" /> Create Event
                 </Button>
               )}
-              <Button
-                variant="outline"
-                onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center gap-2"
-              >
-                <Filter className="h-4 w-4" />
-                Filters
-                {activeCategory !== "All" && (
-                  <Badge variant="secondary" className="ml-1">1</Badge>
-                )}
-              </Button>
             </div>
           </div>
 
-          {/* Enhanced Search Bar */}
           <div className="relative max-w-2xl">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input
@@ -200,26 +228,35 @@ const Events = () => {
               </Button>
             )}
           </div>
+
+          {/* Visible category bar for students (always shown) */}
+          <div className="flex gap-2 flex-wrap mb-8 mt-4">
+            {["All", ...categories.map((cat) => cat.name)].map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${activeCategory === cat ? "bg-primary text-primary-foreground shadow-md" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Enhanced Filters */}
-        <div className={`transition-all duration-500 ${showFilters ? 'opacity-100 max-h-96 mb-8' : 'opacity-0 max-h-0 overflow-hidden'}`}>
+        <div
+          className={`transition-all duration-500 ${showFilters ? "opacity-100 max-h-96 mb-8" : "opacity-0 max-h-0 overflow-hidden"}`}
+        >
           <Card className="border-2 border-dashed border-gray-200 bg-gray-50/50">
             <CardContent className="p-6">
               <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-                <Filter className="w-5 h-5" />
-                Filter by Category
+                <Filter className="w-5 h-5" /> Filter by Category
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {["All", ...categories.map(cat => cat.name)].map((cat) => (
+                {["All", ...categories.map((cat) => cat.name)].map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
-                      activeCategory === cat
-                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-                        : "bg-white text-foreground hover:bg-gray-100 border border-gray-200 hover:border-gray-300"
-                    }`}
+                    className={`px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${activeCategory === cat ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" : "bg-white text-foreground hover:bg-gray-100 border border-gray-200 hover:border-gray-300"}`}
                   >
                     {cat}
                   </button>
@@ -229,24 +266,8 @@ const Events = () => {
           </Card>
         </div>
 
-        {/* Quick Category Pills (always visible) */}
-        <div className="flex gap-2 flex-wrap mb-8">
-          {["All", ...categories.map(cat => cat.name)].slice(0, 4).map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
-                activeCategory === cat
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
+        {/* category bar moved above for visibility */}
 
-        {/* Loading State */}
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -266,9 +287,15 @@ const Events = () => {
               <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Calendar className="w-12 h-12 text-gray-400" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-3">No Events Found</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                No Events Found
+              </h3>
               <p className="text-gray-600 mb-6">
-                {search ? "Try adjusting your search terms" : activeCategory !== "All" ? "No events in this category" : "There are currently no events scheduled"}
+                {search
+                  ? "Try adjusting your search terms"
+                  : activeCategory !== "All"
+                    ? "No events in this category"
+                    : "There are currently no events scheduled"}
               </p>
               <div className="flex gap-3 justify-center">
                 {search && (
@@ -277,7 +304,10 @@ const Events = () => {
                   </Button>
                 )}
                 {activeCategory !== "All" && (
-                  <Button onClick={() => setActiveCategory("All")} variant="outline">
+                  <Button
+                    onClick={() => setActiveCategory("All")}
+                    variant="outline"
+                  >
                     Show All Categories
                   </Button>
                 )}
@@ -286,26 +316,25 @@ const Events = () => {
           </div>
         ) : (
           <>
-            {/* Results count */}
             <div className="mb-6 flex items-center justify-between">
               <p className="text-muted-foreground">
-                Showing <span className="font-semibold text-foreground">{filtered.length}</span> events
+                Showing{" "}
+                <span className="font-semibold text-foreground">
+                  {filtered.length}
+                </span>{" "}
+                events
               </p>
               {search && (
                 <p className="text-sm text-muted-foreground">
-                  Search results for "<span className="font-medium">{search}</span>"
+                  Search results for "
+                  <span className="font-medium">{search}</span>"
                 </p>
               )}
             </div>
 
-            {/* Enhanced Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filtered.map((event, index) => (
-                <div 
-                  key={event.id}
-                  className="animate-fade-in"
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
+                <div key={event.id} className="animate-fade-in">
                   <EventCard event={event} />
                 </div>
               ))}

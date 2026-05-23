@@ -274,58 +274,58 @@ export default function StudentManagement() {
 
       {/* Statistics Cards */}
       {!loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3 md:p-4">
               <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-blue-600" />
+                <Users className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
                 <div>
-                  <div className="text-2xl font-bold">{stats.total}</div>
-                  <div className="text-sm text-muted-foreground">Total Students</div>
+                  <div className="text-xl md:text-2xl font-bold">{stats.total}</div>
+                  <div className="text-xs md:text-sm text-muted-foreground">Total Students</div>
                 </div>
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3 md:p-4">
               <div className="flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-green-600" />
+                <UserCheck className="w-4 h-4 md:w-5 md:h-5 text-green-600" />
                 <div>
-                  <div className="text-2xl font-bold">{stats.active}</div>
-                  <div className="text-sm text-muted-foreground">Active</div>
+                  <div className="text-xl md:text-2xl font-bold">{stats.active}</div>
+                  <div className="text-xs md:text-sm text-muted-foreground">Active</div>
                 </div>
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3 md:p-4">
               <div className="flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-yellow-600" />
+                <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-yellow-600" />
                 <div>
-                  <div className="text-2xl font-bold">{stats.pending}</div>
-                  <div className="text-sm text-muted-foreground">Pending</div>
+                  <div className="text-xl md:text-2xl font-bold">{stats.pending}</div>
+                  <div className="text-xs md:text-sm text-muted-foreground">Pending</div>
                 </div>
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3 md:p-4">
               <div className="flex items-center gap-2">
-                <UserX className="w-5 h-5 text-red-600" />
+                <UserX className="w-4 h-4 md:w-5 md:h-5 text-red-600" />
                 <div>
-                  <div className="text-2xl font-bold">{stats.suspended}</div>
-                  <div className="text-sm text-muted-foreground">Suspended</div>
+                  <div className="text-xl md:text-2xl font-bold">{stats.suspended}</div>
+                  <div className="text-xs md:text-sm text-muted-foreground">Suspended</div>
                 </div>
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3 md:p-4">
               <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-purple-600" />
+                <CheckCircle className="w-4 h-4 md:w-5 md:h-5 text-purple-600" />
                 <div>
-                  <div className="text-2xl font-bold">{stats.completeProfiles}</div>
-                  <div className="text-sm text-muted-foreground">Complete Profiles</div>
+                  <div className="text-xl md:text-2xl font-bold">{stats.completeProfiles}</div>
+                  <div className="text-xs md:text-sm text-muted-foreground">Complete Profiles</div>
                 </div>
               </div>
             </CardContent>
@@ -336,35 +336,35 @@ export default function StudentManagement() {
       {/* Filters and Search */}
       {!loading && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-base md:text-lg">
               <span className="flex items-center gap-2">
-                <Users className="w-5 h-5" />
+                <Users className="w-4 h-4 md:w-5 md:h-5" />
                 Student Management
               </span>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={refreshStudents}>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Button variant="outline" size="sm" onClick={refreshStudents} className="flex-1 sm:flex-none">
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh
+                  <span className="hidden sm:inline">Refresh</span>
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
                   <Download className="w-4 h-4 mr-2" />
-                  Export
+                  <span className="hidden sm:inline">Export</span>
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
                   <Upload className="w-4 h-4 mr-2" />
-                  Import
+                  <span className="hidden sm:inline">Import</span>
                 </Button>
               </div>
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs md:text-sm">
               Manage and view all registered students (Passwords are securely hashed and not visible)
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 md:p-6">
             <div className="space-y-4">
               {/* Search and Filters */}
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col sm:flex-row gap-3">
                 {/* Search Bar */}
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -372,15 +372,15 @@ export default function StudentManagement() {
                     placeholder="Search by name, email, or admission number..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 w-full"
+                    className="pl-10 w-full text-sm"
                   />
                 </div>
 
                 {/* Status Filter */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Status</Label>
+                <div className="space-y-1 sm:space-y-2">
+                  <Label className="text-xs sm:text-sm font-medium">Status</Label>
                   <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                    <SelectTrigger className="w-full sm:w-40">
+                    <SelectTrigger className="w-full sm:w-40 h-9 text-sm">
                       <SelectValue placeholder="All Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -394,8 +394,8 @@ export default function StudentManagement() {
               </div>
 
               {/* Results Count */}
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div className="text-xs md:text-sm text-muted-foreground">
                   Showing {filteredStudents.length} of {students.length} students
                 </div>
                 <Button
@@ -405,6 +405,7 @@ export default function StudentManagement() {
                     setSearchTerm("");
                     setSelectedStatus("all");
                   }}
+                  className="w-full sm:w-auto"
                 >
                   <Filter className="w-4 h-4 mr-2" />
                   Clear Filters
@@ -420,43 +421,43 @@ export default function StudentManagement() {
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[600px]">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="text-left p-4 font-medium">Student Name</th>
-                    <th className="text-left p-4 font-medium">Admission Number</th>
-                    <th className="text-left p-4 font-medium">Email Address</th>
-                    <th className="text-left p-4 font-medium">Registration Date</th>
-                    <th className="text-left p-4 font-medium">Status</th>
-                    <th className="text-left p-4 font-medium">Actions</th>
+                    <th className="text-left p-3 md:p-4 font-medium text-xs md:text-sm">Student Name</th>
+                    <th className="text-left p-3 md:p-4 font-medium text-xs md:text-sm">Admission Number</th>
+                    <th className="text-left p-3 md:p-4 font-medium text-xs md:text-sm">Email Address</th>
+                    <th className="text-left p-3 md:p-4 font-medium text-xs md:text-sm">Registration Date</th>
+                    <th className="text-left p-3 md:p-4 font-medium text-xs md:text-sm">Status</th>
+                    <th className="text-left p-3 md:p-4 font-medium text-xs md:text-sm">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredStudents.map((student) => (
                     <tr key={student.id} className="border-t hover:bg-muted/25 transition-colors">
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <td className="p-3 md:p-4">
+                        <div className="flex items-center gap-2 md:gap-3">
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
                             <Users className="w-4 h-4 text-blue-600" />
                           </div>
                           <div>
-                            <div className="font-medium">{student.first_name} {student.last_name}</div>
+                            <div className="font-medium text-xs md:text-sm">{student.first_name} {student.last_name}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="p-4">
-                        <div className="font-mono text-sm">{student.admission_number}</div>
+                      <td className="p-3 md:p-4">
+                        <div className="font-mono text-xs md:text-sm">{student.admission_number}</div>
                       </td>
-                      <td className="p-4">
-                        <div className="text-sm">{student.email}</div>
+                      <td className="p-3 md:p-4">
+                        <div className="text-xs md:text-sm truncate max-w-[150px] md:max-w-none">{student.email}</div>
                       </td>
-                      <td className="p-4">
-                        <div className="text-sm">{new Date(student.created_at).toLocaleDateString()}</div>
+                      <td className="p-3 md:p-4">
+                        <div className="text-xs md:text-sm">{new Date(student.created_at).toLocaleDateString()}</div>
                       </td>
-                      <td className="p-4">
-                        <Badge variant="default">Active</Badge>
+                      <td className="p-3 md:p-4">
+                        <Badge variant="default" className="text-xs">Active</Badge>
                       </td>
-                      <td className="p-4">
+                      <td className="p-3 md:p-4">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm">
@@ -507,10 +508,10 @@ export default function StudentManagement() {
               </table>
               
               {filteredStudents.length === 0 && (
-                <div className="text-center py-12">
+                <div className="text-center py-12 px-4">
                   <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-medium mb-2">No Students Registered</h3>
-                  <p className="text-muted-foreground mb-4">
+                  <p className="text-muted-foreground mb-4 text-sm">
                     No student accounts have been created yet. Students can register through the authentication page.
                   </p>
                   <Button onClick={refreshStudents} variant="outline">

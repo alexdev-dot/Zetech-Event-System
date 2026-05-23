@@ -1,28 +1,33 @@
 /**
- * db.js — Supabase JavaScript client
+ * db.js — Postgres pool wrapper
  *
- * Uses @supabase/supabase-js which talks to Supabase PostgREST over HTTPS.
- * No custom run_sql function needed.
- * Passes the `ws` package for WebSocket support on Node.js < 22.
+ * Uses `pg` Pool and reads `DATABASE_URL` + optional `DB_SSL` from environment.
  */
 
-import { createClient } from "@supabase/supabase-js";
-import ws from "ws";
+import { Pool } from "pg";
 
-if (!process.env.SUPABASE_URL)      throw new Error("SUPABASE_URL is not set");
-if (!process.env.SUPABASE_ANON_KEY) throw new Error("SUPABASE_ANON_KEY is not set");
+let pgPool = null;
+if (process.env.DATABASE_URL) {
+  pgPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl:
+      process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : undefined,
+  });
+}
 
-export const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY,
-  {
-    auth:     { persistSession: false },
-    realtime: { transport: ws },
-  }
-);
+export const pool = pgPool;
 
 /** Throw an error if the DB can't be reached. */
 export async function testConnection() {
-  const { error } = await supabase.from("admins").select("id").limit(1);
-  if (error) throw new Error(error.message);
+  if (pgPool) {
+    const client = await pgPool.connect();
+    try {
+      await client.query("SELECT 1");
+    } finally {
+      client.release();
+    }
+    return;
+  }
+
+  throw new Error("No DATABASE_URL configured in environment");
 }

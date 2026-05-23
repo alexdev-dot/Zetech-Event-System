@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS events (
   updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE events ADD COLUMN IF NOT EXISTS category VARCHAR(100) NOT NULL DEFAULT 'General';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS max_participants INT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS image_url VARCHAR(500);
+
 CREATE TABLE IF NOT EXISTS event_registrations (
   id                SERIAL PRIMARY KEY,
   event_id          INT         NOT NULL REFERENCES events(id) ON DELETE CASCADE,
