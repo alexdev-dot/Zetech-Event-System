@@ -50,6 +50,9 @@ interface Student {
   last_name: string;
   admission_number: string;
   email: string;
+  phone?: string;
+  status?: string;
+  last_login?: string;
   created_at: string;
 }
 
@@ -270,7 +273,7 @@ export default function StudentManagement() {
     const fetchStudents = async () => {
       try {
         const data = await api.admin.getStudents();
-        setStudents(data);
+        setStudents(Array.isArray(data) ? data : (data.students || []));
       } catch (error) {
         console.error("Failed to fetch students:", error);
         toast.error("Failed to load students");
@@ -287,7 +290,7 @@ export default function StudentManagement() {
     setLoading(true);
     try {
       const data = await api.admin.getStudents();
-      setStudents(data);
+      setStudents(Array.isArray(data) ? data : (data.students || []));
       toast.success("Student data refreshed successfully");
     } catch (error) {
       console.error("Failed to refresh students:", error);
