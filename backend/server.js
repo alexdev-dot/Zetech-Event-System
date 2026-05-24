@@ -421,6 +421,69 @@ async function ensureDatabaseSchema() {
     ON CONFLICT (key) DO NOTHING
   `);
 
+  // Event categories table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_categories (
+      id            SERIAL PRIMARY KEY,
+      name          VARCHAR(100) NOT NULL UNIQUE,
+      display_order INT          NOT NULL DEFAULT 0,
+      created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // Event subcategories table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_subcategories (
+      id            SERIAL PRIMARY KEY,
+      category_id   INT          NOT NULL REFERENCES event_categories(id) ON DELETE CASCADE,
+      name          VARCHAR(100) NOT NULL,
+      display_order INT          NOT NULL DEFAULT 0,
+      created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      UNIQUE (category_id, name)
+    )
+  `);
+
+  // Seed default categories & subcategories if empty
+  await pool.query(`
+    INSERT INTO event_categories (name, display_order) VALUES
+      ('Tech & Academic',    0),
+      ('Social & Community', 1),
+      ('Sports & Games',     2),
+      ('Religious Groups',   3),
+      ('Student Leadership', 4),
+      ('Creative & Media',   5)
+    ON CONFLICT (name) DO NOTHING
+  `);
+
+  await pool.query(`
+    INSERT INTO event_subcategories (category_id, name, display_order)
+    SELECT c.id, v.name, v.ord FROM (VALUES
+      ('Tech & Academic',    'IT Club (iTech)',                         0),
+      ('Tech & Academic',    'Engineering Club',                        1),
+      ('Tech & Academic',    'Innovation & Mentorship Hub (iZET)',      2),
+      ('Tech & Academic',    'Ajira Club',                              3),
+      ('Tech & Academic',    'Journalism Club',                         4),
+      ('Tech & Academic',    'Entrepreneurs Club',                      5),
+      ('Tech & Academic',    'Hotel Club',                              6),
+      ('Tech & Academic',    'Tourism Club',                            7),
+      ('Social & Community', 'Community Development Club',              0),
+      ('Social & Community', 'Knowledge Ambassadors Club (ZUKA)',       1),
+      ('Social & Community', 'Lions Club',                              2),
+      ('Social & Community', 'Rotaract Club',                           3),
+      ('Sports & Games',     'Football teams',                          0),
+      ('Sports & Games',     'Basketball teams',                        1),
+      ('Sports & Games',     'Rugby',                                   2),
+      ('Sports & Games',     'Chess',                                   3),
+      ('Religious Groups',   'Christian Union',                         0),
+      ('Religious Groups',   'Muslim Association',                      1),
+      ('Religious Groups',   'SDA (Seventh Day Adventist)',             2),
+      ('Religious Groups',   'Catholic Action',                         3),
+      ('Student Leadership', 'Zetech university Student Association (ZUSA)', 0)
+    ) AS v(cat, name, ord)
+    JOIN event_categories c ON c.name = v.cat
+    ON CONFLICT (category_id, name) DO NOTHING
+  `);
+
   // Performance indexes for 10,000+ students
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_student_reg_admission  ON student_registrations(admission_number);
@@ -525,6 +588,37 @@ function requireAdminOrLeader(req, res, next) {
     next();
   });
 }
+
+// ─── CATEGORIES (public) ──────────────────────────────────────────────────────
+
+app.get("/api/categories", async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        ec.id,
+        ec.name,
+        ec.display_order,
+        COALESCE(
+          JSON_AGG(
+            JSON_BUILD_OBJECT(
+              'id',            es.id,
+              'name',          es.name,
+              'display_order', es.display_order
+            ) ORDER BY es.display_order, es.id
+          ) FILTER (WHERE es.id IS NOT NULL),
+          '[]'::JSON
+        ) AS subcategories
+      FROM event_categories ec
+      LEFT JOIN event_subcategories es ON es.category_id = ec.id
+      GROUP BY ec.id, ec.name, ec.display_order
+      ORDER BY ec.display_order, ec.id
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Get categories error:", err);
+    res.status(500).json({ message: "Failed to fetch categories" });
+  }
+});
 
 // ─── HEALTH ───────────────────────────────────────────────────────────────────
 
@@ -2046,6 +2140,150 @@ app.delete("/api/admin/club-leaders/:id", requireAdmin, async (req, res) => {
   } catch (error) {
     console.error("Delete club leader error:", error);
     res.status(500).json({ message: "Failed to delete club leader" });
+  }
+});
+
+// ─── ADMIN: CATEGORY CRUD ─────────────────────────────────────────────────────
+
+// GET all categories (admin view — same as public but admin-gated for future use)
+app.get("/api/admin/categories", requireAdmin, async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        ec.id,
+        ec.name,
+        ec.display_order,
+        COALESCE(
+          JSON_AGG(
+            JSON_BUILD_OBJECT(
+              'id',            es.id,
+              'name',          es.name,
+              'display_order', es.display_order
+            ) ORDER BY es.display_order, es.id
+          ) FILTER (WHERE es.id IS NOT NULL),
+          '[]'::JSON
+        ) AS subcategories
+      FROM event_categories ec
+      LEFT JOIN event_subcategories es ON es.category_id = ec.id
+      GROUP BY ec.id, ec.name, ec.display_order
+      ORDER BY ec.display_order, ec.id
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Admin get categories error:", err);
+    res.status(500).json({ message: "Failed to fetch categories" });
+  }
+});
+
+// POST create category
+app.post("/api/admin/categories", requireAdmin, async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ message: "Name is required" });
+  try {
+    const maxOrd = await pool.query(`SELECT COALESCE(MAX(display_order), -1) AS m FROM event_categories`);
+    const nextOrd = (maxOrd.rows[0]?.m ?? -1) + 1;
+    const result = await pool.query(
+      `INSERT INTO event_categories (name, display_order) VALUES ($1, $2) RETURNING *`,
+      [name.trim(), nextOrd]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ message: "Category already exists" });
+    console.error("Create category error:", err);
+    res.status(500).json({ message: "Failed to create category" });
+  }
+});
+
+// PUT rename category
+app.put("/api/admin/categories/:id", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ message: "Name is required" });
+  try {
+    const result = await pool.query(
+      `UPDATE event_categories SET name = $1 WHERE id = $2 RETURNING *`,
+      [name.trim(), id]
+    );
+    if (!result.rows.length) return res.status(404).json({ message: "Category not found" });
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ message: "Category name already in use" });
+    console.error("Update category error:", err);
+    res.status(500).json({ message: "Failed to update category" });
+  }
+});
+
+// DELETE category (subcategories cascade)
+app.delete("/api/admin/categories/:id", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+  try {
+    const result = await pool.query(`DELETE FROM event_categories WHERE id = $1 RETURNING id`, [id]);
+    if (!result.rows.length) return res.status(404).json({ message: "Category not found" });
+    res.json({ message: "Category deleted" });
+  } catch (err) {
+    console.error("Delete category error:", err);
+    res.status(500).json({ message: "Failed to delete category" });
+  }
+});
+
+// POST add subcategory to category
+app.post("/api/admin/categories/:id/subcategories", requireAdmin, async (req, res) => {
+  const categoryId = parseInt(req.params.id);
+  if (isNaN(categoryId)) return res.status(400).json({ message: "Invalid category ID" });
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ message: "Name is required" });
+  try {
+    const maxOrd = await pool.query(
+      `SELECT COALESCE(MAX(display_order), -1) AS m FROM event_subcategories WHERE category_id = $1`,
+      [categoryId]
+    );
+    const nextOrd = (maxOrd.rows[0]?.m ?? -1) + 1;
+    const result = await pool.query(
+      `INSERT INTO event_subcategories (category_id, name, display_order) VALUES ($1, $2, $3) RETURNING *`,
+      [categoryId, name.trim(), nextOrd]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ message: "Sub-category already exists in this category" });
+    if (err.code === "23503") return res.status(404).json({ message: "Category not found" });
+    console.error("Add subcategory error:", err);
+    res.status(500).json({ message: "Failed to add sub-category" });
+  }
+});
+
+// PUT rename subcategory
+app.put("/api/admin/subcategories/:id", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ message: "Name is required" });
+  try {
+    const result = await pool.query(
+      `UPDATE event_subcategories SET name = $1 WHERE id = $2 RETURNING *`,
+      [name.trim(), id]
+    );
+    if (!result.rows.length) return res.status(404).json({ message: "Sub-category not found" });
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ message: "Sub-category name already exists in this category" });
+    console.error("Update subcategory error:", err);
+    res.status(500).json({ message: "Failed to update sub-category" });
+  }
+});
+
+// DELETE subcategory
+app.delete("/api/admin/subcategories/:id", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+  try {
+    const result = await pool.query(`DELETE FROM event_subcategories WHERE id = $1 RETURNING id`, [id]);
+    if (!result.rows.length) return res.status(404).json({ message: "Sub-category not found" });
+    res.json({ message: "Sub-category deleted" });
+  } catch (err) {
+    console.error("Delete subcategory error:", err);
+    res.status(500).json({ message: "Failed to delete sub-category" });
   }
 });
 

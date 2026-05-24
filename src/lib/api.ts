@@ -20,6 +20,11 @@ async function handleResponse(res: Response) {
 }
 
 export const api = {
+  categories: {
+    getAll: () =>
+      fetch(`${API_BASE_URL}/categories`).then(handleResponse),
+  },
+
   auth: {
     register: (data: {
       firstName: string;
@@ -243,6 +248,52 @@ export const api = {
         method: "PUT",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(settings),
+      }).then(handleResponse),
+
+    // Category management
+    getCategories: () =>
+      fetch(`${API_BASE_URL}/admin/categories`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+
+    createCategory: (name: string) =>
+      fetch(`${API_BASE_URL}/admin/categories`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      }).then(handleResponse),
+
+    updateCategory: (id: number, name: string) =>
+      fetch(`${API_BASE_URL}/admin/categories/${id}`, {
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      }).then(handleResponse),
+
+    deleteCategory: (id: number) =>
+      fetch(`${API_BASE_URL}/admin/categories/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      }).then(handleResponse),
+
+    addSubcategory: (categoryId: number, name: string) =>
+      fetch(`${API_BASE_URL}/admin/categories/${categoryId}/subcategories`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      }).then(handleResponse),
+
+    updateSubcategory: (id: number, name: string) =>
+      fetch(`${API_BASE_URL}/admin/subcategories/${id}`, {
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      }).then(handleResponse),
+
+    deleteSubcategory: (id: number) =>
+      fetch(`${API_BASE_URL}/admin/subcategories/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
       }).then(handleResponse),
 
     // SMS

@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar, MapPin, Clock, User, ArrowLeft, Send, Upload, X, Image as ImageIcon } from "lucide-react";
-import { categories, allSubCategories, campuses } from "@/data/events";
+import { campuses } from "@/data/events";
+import { useCategories } from "@/hooks/useCategories";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -27,6 +28,7 @@ interface EventFormData {
 }
 
 const CreateEvent = () => {
+  const { categories } = useCategories();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -271,7 +273,7 @@ const CreateEvent = () => {
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      {allSubCategories.map((cat) => (
+                      {categories.flatMap((c) => c.subCategories).map((cat) => (
                         <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                       ))}
                     </SelectContent>

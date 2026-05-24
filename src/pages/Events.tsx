@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 
 import Layout from "@/components/Layout";
 import EventCard from "@/components/EventCard";
-import { categories, allSubCategories, type Event } from "@/data/events";
+import { type Event } from "@/data/events";
+import { useCategories } from "@/hooks/useCategories";
 import { api } from "@/lib/api";
 import {
   Search,
@@ -44,6 +45,7 @@ const Events = () => {
   const [allEvents, setAllEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  const { categories } = useCategories();
   const { user } = useAuth();
   const navigate = useNavigate();
 
