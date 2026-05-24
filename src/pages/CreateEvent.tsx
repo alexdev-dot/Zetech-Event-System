@@ -116,7 +116,7 @@ const CreateEvent = () => {
         time: formData.time,
         location,
         category: formData.category,
-        maxParticipants: parseInt(formData.capacity) || undefined,
+        maxParticipants: formData.capacity ? (parseInt(formData.capacity) || undefined) : undefined,
         imageUrl: formData.flyerUrl || undefined,
       };
 
@@ -145,8 +145,7 @@ const CreateEvent = () => {
            formData.venue &&
            formData.campus &&
            formData.category &&
-           formData.organizer &&
-           formData.capacity;
+           formData.organizer;
   };
 
   return (
@@ -293,16 +292,15 @@ const CreateEvent = () => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="capacity">Expected Capacity *</Label>
+                    <Label htmlFor="capacity">Max Attendees <span className="text-gray-400 font-normal">(optional — leave blank for Unlimited)</span></Label>
                     <Input
                       id="capacity"
                       type="number"
                       value={formData.capacity}
                       onChange={(e) => handleInputChange("capacity", e.target.value)}
-                      placeholder="Number of attendees"
+                      placeholder="e.g. 200 — or leave blank for unlimited"
                       min="1"
                       max="10000"
-                      required
                     />
                   </div>
                 </div>

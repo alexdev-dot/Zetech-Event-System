@@ -29,7 +29,11 @@ type SystemSettings = {
   contact_email?: string;
 };
 
-export default function AdminSystemSettings() {
+interface AdminSystemSettingsProps {
+  initialSection?: "general" | "sms";
+}
+
+export default function AdminSystemSettings({ initialSection = "general" }: AdminSystemSettingsProps) {
   const [settings, setSettings] = useState<SystemSettings>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -126,6 +130,8 @@ export default function AdminSystemSettings() {
     }
   };
 
+  const [activeTab, setActiveTab] = useState<"general" | "sms">(initialSection);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -138,7 +144,7 @@ export default function AdminSystemSettings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-800">System Settings</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Platform Settings</h2>
           <p className="text-sm text-gray-500">Customise and control the entire platform</p>
         </div>
         <Button variant="outline" size="sm" onClick={load}>
@@ -146,6 +152,24 @@ export default function AdminSystemSettings() {
         </Button>
       </div>
 
+      {/* Section tabs */}
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setActiveTab("general")}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === "general" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+        >
+          General & Access
+        </button>
+        <button
+          onClick={() => setActiveTab("sms")}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === "sms" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+        >
+          SMS & Broadcast
+        </button>
+      </div>
+
+      {activeTab === "general" && (
+      <div className="space-y-6">
       {/* General Settings */}
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-4">
@@ -282,7 +306,11 @@ export default function AdminSystemSettings() {
           )}
         </Button>
       </div>
+      </div>
+      )}
 
+      {activeTab === "sms" && (
+      <div className="space-y-6">
       {/* SMS Broadcast */}
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-4">
@@ -369,6 +397,8 @@ export default function AdminSystemSettings() {
           </Button>
         </CardContent>
       </Card>
+      </div>
+      )}
     </div>
   );
 }

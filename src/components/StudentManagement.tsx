@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -268,63 +268,55 @@ export default function StudentManagement() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showDetails, setShowDetails] = useState(false);
 
-  // Fetch students from database
-  useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        const data = await api.admin.getStudents();
-        setStudents(Array.isArray(data) ? data : (data.students || []));
-      } catch (error) {
-        console.error("Failed to fetch students:", error);
-        toast.error("Failed to load students");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    fetchStudents();
-  }, []);
-
-  // Refresh students data
-  const refreshStudents = async () => {
-    setLoading(true);
+  const fetchStudents = async (search = "", showSpinner = true) => {
+    if (showSpinner) setLoading(true); else setSearchLoading(true);
     try {
-      const data = await api.admin.getStudents();
-      setStudents(Array.isArray(data) ? data : (data.students || []));
-      toast.success("Student data refreshed successfully");
+      const data = await api.admin.getStudents({ search });
+      const list = Array.isArray(data) ? data : (data.students || []);
+      setStudents(list);
+      setTotalCount(Array.isArray(data) ? list.length : (data.total ?? list.length));
     } catch (error) {
-      console.error("Failed to refresh students:", error);
-      toast.error("Failed to refresh students");
+      console.error("Failed to fetch students:", error);
+      toast.error("Failed to load students");
     } finally {
       setLoading(false);
+      setSearchLoading(false);
     }
   };
 
-  const filteredStudents = useMemo(() => {
-    return students.filter(student => {
-      const matchesSearch = 
-        student.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.admission_number.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      // Since we don't have status from database yet, we'll show all students
-      const matchesStatus = selectedStatus === "all";
+  // Initial load
+  useEffect(() => {
+    fetchStudents("", true);
+  }, []);
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [students, searchTerm, selectedStatus]);
+  // Debounced search
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      fetchStudents(searchTerm, false);
+    }, 400);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [searchTerm]);
 
-  const stats = useMemo(() => {
-    const total = students.length;
-    // Since we don't have status from database yet, all students are considered active
-    const active = total;
-    const pending = 0;
-    const suspended = 0;
-    const completeProfiles = total; // All students have complete profiles for now
+  // Refresh students data
+  const refreshStudents = async () => {
+    await fetchStudents(searchTerm, true);
+    toast.success("Student data refreshed successfully");
+  };
 
-    return { total, active, pending, suspended, completeProfiles };
-  }, [students]);
+  const stats = {
+    total: totalCount || students.length,
+    active: totalCount || students.length,
+    pending: 0,
+    suspended: 0,
+    completeProfiles: totalCount || students.length,
+  };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
@@ -456,8 +448,13 @@ export default function StudentManagement() {
                     placeholder="Search by name, email, or admission number..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 w-full text-sm"
+                    className="pl-10 w-full text-sm pr-8"
                   />
+                  {searchLoading && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <RefreshCw className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Status Filter */}
@@ -480,7 +477,7 @@ export default function StudentManagement() {
               {/* Results Count */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div className="text-xs md:text-sm text-muted-foreground">
-                  Showing {filteredStudents.length} of {students.length} students
+                  {searchLoading ? "Searching..." : `Showing ${students.length} of ${stats.total} students`}
                 </div>
                 <Button
                   variant="outline"
@@ -517,7 +514,7 @@ export default function StudentManagement() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredStudents.map((student) => (
+                  {students.map((student) => (
                     <tr key={student.id} className="border-t hover:bg-muted/25 transition-colors">
                       <td className="p-3 md:p-4">
                         <div className="flex items-center gap-2 md:gap-3">
@@ -591,7 +588,7 @@ export default function StudentManagement() {
                 </tbody>
               </table>
               
-              {filteredStudents.length === 0 && (
+              {students.length === 0 && !loading && (
                 <div className="text-center py-12 px-4">
                   <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-medium mb-2">No Students Registered</h3>

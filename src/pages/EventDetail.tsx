@@ -92,10 +92,11 @@ const EventDetail = () => {
   }
 
   const dateObj = new Date(event.date);
-  const fillPercent = Math.round((event.registrations / event.capacity) * 100);
-  const isAlmostFull = fillPercent >= 80;
+  const isUnlimited = !event.capacity || event.capacity === 0;
+  const fillPercent = isUnlimited ? 0 : Math.round((event.registrations / event.capacity) * 100);
+  const isAlmostFull = !isUnlimited && fillPercent >= 80;
   const isPastEvent = new Date(event.date) < new Date();
-  const spotsRemaining = event.capacity - event.registrations;
+  const spotsRemaining = isUnlimited ? null : event.capacity - event.registrations;
 
   const shareEvent = async (platform: string) => {
     const eventUrl = `${window.location.origin}/events/${event!.id}`;
@@ -232,7 +233,7 @@ const EventDetail = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5" />
-                <span>{event.registrations}/{event.capacity} attending</span>
+                <span>{event.registrations} / {isUnlimited ? "Unlimited" : event.capacity} attending</span>
               </div>
             </div>
             
@@ -263,11 +264,11 @@ const EventDetail = () => {
                 {/* Quick Stats */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
                   <div className="text-center p-4 bg-blue-50 rounded-xl">
-                    <div className="text-2xl font-bold text-blue-600">{event.capacity}</div>
+                    <div className="text-2xl font-bold text-blue-600">{isUnlimited ? "∞" : event.capacity}</div>
                     <div className="text-sm text-gray-600">Total Capacity</div>
                   </div>
                   <div className="text-center p-4 bg-green-50 rounded-xl">
-                    <div className="text-2xl font-bold text-green-600">{spotsRemaining}</div>
+                    <div className="text-2xl font-bold text-green-600">{isUnlimited ? "Open" : spotsRemaining}</div>
                     <div className="text-sm text-gray-600">Spots Left</div>
                   </div>
                   <div className="text-center p-4 bg-purple-50 rounded-xl">
@@ -325,7 +326,7 @@ const EventDetail = () => {
                     <div>
                       <div className="font-semibold text-gray-900">Attendance</div>
                       <div className="text-gray-600 mt-1">{event.registrations} registered</div>
-                      <div className="text-gray-600">{event.capacity} max capacity</div>
+                      <div className="text-gray-600">{isUnlimited ? "Unlimited capacity" : `${event.capacity} max capacity`}</div>
                     </div>
                   </div>
                   
@@ -353,31 +354,40 @@ const EventDetail = () => {
               <CardContent className="space-y-6">
                 {/* Registration Status */}
                 <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Registration Progress</span>
-                    <span className={`font-semibold text-sm ${
-                      isAlmostFull ? 'text-orange-600' : fillPercent > 50 ? 'text-yellow-600' : 'text-green-600'
-                    }`}>
-                      {fillPercent}%
-                    </span>
-                  </div>
-                  <div className="relative h-3 w-full overflow-hidden rounded-full bg-secondary">
-                    <div 
-                      className="h-full w-full flex-1 transition-all"
-                      style={{
-                        transform: `translateX(-${100 - fillPercent}%)`,
-                        backgroundColor: isAlmostFull ? '#f97316' : fillPercent > 50 ? '#eab308' : '#22c55e'
-                      }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">{event.registrations} registered</span>
-                    <span className={`font-medium ${
-                      spotsRemaining <= 5 ? 'text-red-600' : 'text-gray-700'
-                    }`}>
-                      {spotsRemaining} spots left
-                    </span>
-                  </div>
+                  {isUnlimited ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">{event.registrations} registered</span>
+                      <span className="text-sm font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Unlimited</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Registration Progress</span>
+                        <span className={`font-semibold text-sm ${
+                          isAlmostFull ? 'text-orange-600' : fillPercent > 50 ? 'text-yellow-600' : 'text-green-600'
+                        }`}>
+                          {fillPercent}%
+                        </span>
+                      </div>
+                      <div className="relative h-3 w-full overflow-hidden rounded-full bg-secondary">
+                        <div
+                          className="h-full w-full flex-1 transition-all"
+                          style={{
+                            transform: `translateX(-${100 - fillPercent}%)`,
+                            backgroundColor: isAlmostFull ? '#f97316' : fillPercent > 50 ? '#eab308' : '#22c55e'
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">{event.registrations} registered</span>
+                        <span className={`font-medium ${
+                          (spotsRemaining ?? 0) <= 5 ? 'text-red-600' : 'text-gray-700'
+                        }`}>
+                          {spotsRemaining} spots left
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Urgency Indicator */}
@@ -397,7 +407,7 @@ const EventDetail = () => {
                     className="w-full text-lg py-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
                     size="lg"
                     onClick={handleRegister}
-                    disabled={isRegistered || registering || spotsRemaining === 0}
+                    disabled={isRegistered || registering || (!isUnlimited && spotsRemaining === 0)}
                   >
                     {isRegistered ? (
                       <>
@@ -406,7 +416,7 @@ const EventDetail = () => {
                       </>
                     ) : registering ? (
                       "Registering..."
-                    ) : spotsRemaining === 0 ? (
+                    ) : (!isUnlimited && spotsRemaining === 0) ? (
                       "Event Full"
                     ) : (
                       <>

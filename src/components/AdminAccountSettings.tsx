@@ -36,6 +36,7 @@ interface AdminAccountSettingsProps {
   currentAdminEmail?: string;
   currentAdminName?: string;
   onAdminUpdated?: (adminData: { id: number; email: string; name?: string }) => void;
+  initialTab?: "account" | "profile" | "notifications" | "activity" | "sessions";
 }
 
 // Account Settings Component
@@ -301,117 +302,6 @@ function NotificationSettings() {
   );
 }
 
-// System Configuration Component
-function SystemConfiguration() {
-  const [config, setConfig] = useState(() => {
-    const saved = localStorage.getItem('adminSystemConfig');
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return {
-      defaultMaxParticipants: "100",
-      autoApproveCategories: false,
-      requireApprovalThreshold: false,
-      maintenanceMode: false,
-      maintenanceMessage: ""
-    };
-  });
-  const [categories, setCategories] = useState<string[]>(() => {
-    const saved = localStorage.getItem('adminCategories');
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return ["Academic", "Sports", "Social", "Cultural", "Technical"];
-  });
-  const [newCategory, setNewCategory] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-
-  const addCategory = () => {
-    if (newCategory.trim()) {
-      const updated = [...categories, newCategory.trim()];
-      setCategories(updated);
-      localStorage.setItem('adminCategories', JSON.stringify(updated));
-      setNewCategory("");
-    }
-  };
-
-  const removeCategory = (index: number) => {
-    const updated = categories.filter((_, i) => i !== index);
-    setCategories(updated);
-    localStorage.setItem('adminCategories', JSON.stringify(updated));
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      localStorage.setItem('adminSystemConfig', JSON.stringify(config));
-      localStorage.setItem('adminCategories', JSON.stringify(categories));
-      toast({ title: "System configuration saved" });
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to save configuration", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><SettingsIcon className="h-5 w-5" />System Configuration</CardTitle>
-        <CardDescription>Configure system-wide settings</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-4">
-          <h3 className="font-medium">Event Settings</h3>
-          <div className="space-y-2">
-            <Label htmlFor="defaultMaxParticipants">Default Max Participants</Label>
-            <Input id="defaultMaxParticipants" type="number" value={config.defaultMaxParticipants} onChange={(e) => setConfig({ ...config, defaultMaxParticipants: e.target.value })} />
-          </div>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="autoApproveCategories">Auto-approve certain categories</Label>
-            <Switch id="autoApproveCategories" checked={config.autoApproveCategories} onCheckedChange={(checked) => setConfig({ ...config, autoApproveCategories: checked })} />
-          </div>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="requireApprovalThreshold">Require approval threshold</Label>
-            <Switch id="requireApprovalThreshold" checked={config.requireApprovalThreshold} onCheckedChange={(checked) => setConfig({ ...config, requireApprovalThreshold: checked })} />
-          </div>
-        </div>
-        <div className="space-y-4">
-          <h3 className="font-medium">Event Categories</h3>
-          <div className="flex gap-2">
-            <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="New category" onKeyPress={(e) => e.key === 'Enter' && addCategory()} />
-            <Button type="button" onClick={addCategory}><Plus className="h-4 w-4" /></Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {categories.map((cat, index) => (
-              <div key={index} className="flex items-center gap-1 bg-gray-100 px-3 py-1 rounded-full text-sm">
-                {cat}
-                <button type="button" onClick={() => removeCategory(index)} className="text-gray-500 hover:text-red-500"><X className="h-3 w-3" /></button>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-4">
-          <h3 className="font-medium">Maintenance Mode</h3>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="maintenanceMode">Enable maintenance mode</Label>
-            <Switch id="maintenanceMode" checked={config.maintenanceMode} onCheckedChange={(checked) => setConfig({ ...config, maintenanceMode: checked })} />
-          </div>
-          {config.maintenanceMode && (
-            <div className="space-y-2">
-              <Label htmlFor="maintenanceMessage">Maintenance Message</Label>
-              <Textarea id="maintenanceMessage" value={config.maintenanceMessage} onChange={(e) => setConfig({ ...config, maintenanceMessage: e.target.value })} placeholder="System is under maintenance..." rows={2} />
-            </div>
-          )}
-        </div>
-        <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2"><Save className="h-4 w-4" />{isSaving ? "Saving..." : "Save Configuration"}</Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 // Activity Log Component
 function ActivityLog() {
   const [activities, setActivities] = useState<any[]>([]);
@@ -580,20 +470,20 @@ function SessionManagement() {
 const AdminAccountSettings = ({ 
   currentAdminEmail = "admin@zetech.ac.ke",
   currentAdminName,
-  onAdminUpdated 
+  onAdminUpdated,
+  initialTab = "account",
 }: AdminAccountSettingsProps) => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-800">Settings</h2>
-        <p className="text-gray-500">Manage your account and system preferences</p>
+        <h2 className="text-2xl font-bold text-gray-800">Account Settings</h2>
+        <p className="text-gray-500">Manage your credentials, profile and preferences</p>
       </div>
-      <Tabs defaultValue="account" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 h-auto bg-white/50 backdrop-blur-sm p-1.5 rounded-xl shadow-sm border border-gray-200/50">
+      <Tabs defaultValue={initialTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-5 h-auto bg-white/50 backdrop-blur-sm p-1.5 rounded-xl shadow-sm border border-gray-200/50">
           <TabsTrigger value="account" className="data-[state=active]:bg-white data-[state=active]:shadow-md cursor-pointer">Account</TabsTrigger>
           <TabsTrigger value="profile" className="data-[state=active]:bg-white data-[state=active]:shadow-md cursor-pointer">Profile</TabsTrigger>
           <TabsTrigger value="notifications" className="data-[state=active]:bg-white data-[state=active]:shadow-md cursor-pointer">Notifications</TabsTrigger>
-          <TabsTrigger value="system" className="data-[state=active]:bg-white data-[state=active]:shadow-md cursor-pointer">System</TabsTrigger>
           <TabsTrigger value="activity" className="data-[state=active]:bg-white data-[state=active]:shadow-md cursor-pointer">Activity</TabsTrigger>
           <TabsTrigger value="sessions" className="data-[state=active]:bg-white data-[state=active]:shadow-md cursor-pointer">Sessions</TabsTrigger>
         </TabsList>
@@ -605,9 +495,6 @@ const AdminAccountSettings = ({
         </TabsContent>
         <TabsContent value="notifications">
           <NotificationSettings />
-        </TabsContent>
-        <TabsContent value="system">
-          <SystemConfiguration />
         </TabsContent>
         <TabsContent value="activity">
           <ActivityLog />

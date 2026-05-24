@@ -178,11 +178,11 @@ const EventCard = ({ event }: { event: Event }) => {
 
   const day = dateObj.getDate();
 
-  const fillPercentage = Math.round(
-    (event.registrations / event.capacity) * 100,
-  );
-
-  const isAlmostFull = fillPercentage >= 80;
+  const isUnlimited = !event.capacity || event.capacity === 0;
+  const fillPercentage = isUnlimited
+    ? 0
+    : Math.round((event.registrations / event.capacity) * 100);
+  const isAlmostFull = !isUnlimited && fillPercentage >= 80;
 
   const categoryColor =
     categoryColors[event.category] || categoryColors.default;
@@ -301,27 +301,31 @@ const EventCard = ({ event }: { event: Event }) => {
               <Users className="w-4 h-4 text-gray-500" />
 
               <span className="font-medium text-gray-700">
-                {event.registrations}/{event.capacity} registered
+                {event.registrations} {isUnlimited ? "registered" : `/ ${event.capacity} registered`}
               </span>
             </div>
 
             <span
               className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                isAlmostFull
-                  ? "bg-orange-100 text-orange-700"
-                  : fillPercentage > 50
-                    ? "bg-yellow-100 text-yellow-700"
-                    : "bg-green-100 text-green-700"
+                isUnlimited
+                  ? "bg-blue-100 text-blue-700"
+                  : isAlmostFull
+                    ? "bg-orange-100 text-orange-700"
+                    : fillPercentage > 50
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-green-100 text-green-700"
               }`}
             >
-              {fillPercentage}% Full
+              {isUnlimited ? "Unlimited" : `${fillPercentage}% Full`}
             </span>
           </div>
 
-          <Progress
-            value={fillPercentage}
-            className="h-2 transition-all duration-500"
-          />
+          {!isUnlimited && (
+            <Progress
+              value={fillPercentage}
+              className="h-2 transition-all duration-500"
+            />
+          )}
         </div>
 
         {/* Hover action hint */}
