@@ -1,33 +1,30 @@
 /**
- * db.js — Postgres pool wrapper
+ * db.js — Supabase client wrapper
  *
- * Uses `pg` Pool and reads `DATABASE_URL` + optional `DB_SSL` from environment.
+ * Uses `@supabase/supabase-js` and reads `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` from environment.
  */
 
-import { Pool } from "pg";
+import { createClient } from "@supabase/supabase-js";
 
-let pgPool = null;
-if (process.env.DATABASE_URL) {
-  pgPool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl:
-      process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : undefined,
-  });
+let supabase = null;
+if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
 }
 
-export const pool = pgPool;
+export const pool = supabase;
 
 /** Throw an error if the DB can't be reached. */
 export async function testConnection() {
-  if (pgPool) {
-    const client = await pgPool.connect();
-    try {
-      await client.query("SELECT 1");
-    } finally {
-      client.release();
+  if (supabase) {
+    const { error } = await supabase.from("admins").select("id").limit(1);
+    if (error) {
+      throw error;
     }
     return;
   }
 
-  throw new Error("No DATABASE_URL configured in environment");
+  throw new Error("No SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY configured in environment");
 }
