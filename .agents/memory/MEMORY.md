@@ -1,0 +1,1 @@
+- [Supabase via HTTPS RPC](supabase-https-rpc.md) — Replit blocks ports 5432 & 6543; all SQL routes through exec_sql PostgreSQL function over HTTPS
