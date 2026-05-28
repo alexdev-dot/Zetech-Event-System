@@ -1,7 +1,10 @@
 -- ============================================================
--- Run this ONE TIME in your Supabase SQL editor:
+-- Run this in your Supabase SQL editor (safe to re-run):
 -- https://supabase.com/dashboard → SQL Editor → New Query
 -- ============================================================
+
+-- Fixed version: uses CTE wrap for DML+RETURNING so PostgreSQL
+-- doesn't reject INSERT/UPDATE/DELETE in a FROM subquery position.
 
 CREATE OR REPLACE FUNCTION exec_sql(query_text text)
 RETURNS jsonb
@@ -15,20 +18,26 @@ DECLARE
 BEGIN
   first_kw := upper(split_part(trim(query_text), ' ', 1));
 
-  -- Queries that return rows (SELECT, WITH, or any DML with RETURNING)
-  IF first_kw IN ('SELECT', 'WITH') OR query_text ~* '\yRETURNING\y' THEN
-    BEGIN
-      EXECUTE format(
-        'SELECT COALESCE(to_jsonb(array_agg(row_to_json(t))), ''[]''::jsonb) FROM (%s) t',
-        query_text
-      ) INTO result;
-      RETURN COALESCE(result, '[]'::jsonb);
-    EXCEPTION WHEN OTHERS THEN
-      RAISE;
-    END;
+  IF first_kw = 'SELECT' OR first_kw = 'WITH' THEN
+    -- Pure read queries — safe to wrap as a subquery
+    EXECUTE format(
+      'SELECT COALESCE(to_jsonb(array_agg(row_to_json(t))), ''[]''::jsonb) FROM (%s) t',
+      query_text
+    ) INTO result;
+    RETURN COALESCE(result, '[]'::jsonb);
+
+  ELSIF query_text ~* '\yRETURNING\y' THEN
+    -- DML (INSERT/UPDATE/DELETE) with RETURNING clause.
+    -- PostgreSQL does NOT allow DML in a FROM subquery, so wrap as a CTE instead.
+    EXECUTE format(
+      'WITH _cte AS (%s) SELECT COALESCE(to_jsonb(array_agg(row_to_json(t))), ''[]''::jsonb) FROM _cte t',
+      query_text
+    ) INTO result;
+    RETURN COALESCE(result, '[]'::jsonb);
+
   ELSE
     -- DDL (CREATE TABLE, ALTER TABLE, CREATE INDEX, CREATE FUNCTION, etc.)
-    -- and DML without RETURNING (INSERT/UPDATE/DELETE)
+    -- and DML without RETURNING
     EXECUTE query_text;
     RETURN '[]'::jsonb;
   END IF;
