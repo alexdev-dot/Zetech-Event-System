@@ -11,19 +11,24 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
     proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
+      "/api": {
+        target: "http://localhost:3001",
         changeOrigin: true,
       },
-      '/uploads': {
-        target: 'http://localhost:3001',
+      "/uploads": {
+        target: "http://localhost:3001",
         changeOrigin: true,
+      },
+      "/socket.io": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+        ws: true,
       },
     },
   },
   define: {
-    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(process.env.SUPABASE_URL),
-    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(process.env.SUPABASE_ANON_KEY),
+    "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(process.env.SUPABASE_URL),
+    "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify(process.env.SUPABASE_ANON_KEY),
   },
   plugins: [react()],
   resolve: {

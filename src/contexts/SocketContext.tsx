@@ -24,11 +24,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const socketInstance = io(import.meta.env.VITE_API_URL || "http://localhost:3001", {
-      transports: ["websocket", "polling"],
+    const socketInstance = io({
+      path: "/socket.io",
+      transports: ["polling", "websocket"],
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
     });
 
     socketInstance.on("connect", () => {
