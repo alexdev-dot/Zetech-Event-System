@@ -1,30 +1,43 @@
 /**
- * db.js — Supabase client wrapper
+ * db.js — PostgreSQL connection to Supabase
  *
- * Uses `@supabase/supabase-js` and reads `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` from environment.
+ * Uses the `pg` driver with the Supabase connection string (DATABASE_URL).
+ * This keeps all pool.query() calls in server.js working unchanged.
+ *
+ * Also exports a supabaseAdmin client (using the service role key) for any
+ * Supabase-specific features like storage or auth helpers.
  */
 
+import pg from "pg";
 import { createClient } from "@supabase/supabase-js";
+import ws from "ws";
 
-let supabase = null;
-if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
-}
+const { Pool } = pg;
 
-export const pool = supabase;
+// ─── pg Pool (raw SQL via Supabase Postgres) ──────────────────────────────────
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
-/** Throw an error if the DB can't be reached. */
+// ─── Supabase Admin Client (service role — bypasses RLS) ─────────────────────
+export const supabaseAdmin =
+  process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
+        {
+          realtime: { transport: ws },
+        }
+      )
+    : null;
+
+/** Verify the database connection is reachable. */
 export async function testConnection() {
-  if (supabase) {
-    const { error } = await supabase.from("admins").select("id").limit(1);
-    if (error) {
-      throw error;
-    }
-    return;
+  const client = await pool.connect();
+  try {
+    await client.query("SELECT 1");
+  } finally {
+    client.release();
   }
-
-  throw new Error("No SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY configured in environment");
 }
