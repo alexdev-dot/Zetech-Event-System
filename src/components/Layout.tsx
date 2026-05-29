@@ -1,19 +1,64 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, Bell, User, LogOut, LogIn, Mail, Phone, MessageCircle, ChevronDown } from "lucide-react";
+import { Menu, X, Bell, User, LogOut, LogIn, Mail, Phone, ChevronDown, CheckCheck, CalendarDays, UserCheck, ThumbsUp, ThumbsDown, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useSocket, Notification } from "@/contexts/SocketContext";
 import zetechLogo from "@/assets/zetech-logo.png";
 import WhatsAppButton from "@/components/WhatsAppButton";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import SocialMediaIcons from "@/components/SocialMediaIcons";
 
+function timeAgo(timestamp: string): string {
+  const diff = Date.now() - new Date(timestamp).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function notifIcon(type: Notification["type"]) {
+  switch (type) {
+    case "event:approved": return <CalendarDays className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />;
+    case "registration:success": return <UserCheck className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />;
+    case "event:your-event-approved": return <ThumbsUp className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />;
+    case "event:your-event-rejected": return <ThumbsDown className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />;
+    case "event:new-registration": return <Users className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />;
+  }
+}
+
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [eventsDropdownOpen, setEventsDropdownOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { notifications, unreadCount, markAllRead, clearNotification } = useSocket();
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleBellClick = () => {
+    setNotifOpen((prev) => !prev);
+  };
+
+  const handleNotifClick = (notif: Notification) => {
+    clearNotification(notif.id);
+    setNotifOpen(false);
+    if (notif.eventId) navigate(`/events/${notif.eventId}`);
+  };
 
   const navLinks = [
     { label: "Home", path: "/" },
@@ -64,9 +109,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         <header className="sticky top-0 z-50 bg-card border-b shadow-sm">
           <div className="container flex items-center justify-between h-16 md:h-24 px-4 md:px-0">
             <Link to="/" className="flex items-center gap-3 ml-4 md:ml-8">
-              <img 
-                src={zetechLogo} 
-                alt="Zetech University Logo" 
+              <img
+                src={zetechLogo}
+                alt="Zetech University Logo"
                 className="h-12 md:h-20 w-auto object-contain"
               />
             </Link>
@@ -78,15 +123,17 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   {link.hasDropdown ? (
                     <div
                       className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 cursor-pointer flex items-center gap-1 text-foreground hover:bg-muted ${
-                        eventsDropdownOpen ? 'bg-muted' : ''
+                        eventsDropdownOpen ? "bg-muted" : ""
                       }`}
                       onMouseEnter={() => setEventsDropdownOpen(true)}
                       onMouseLeave={() => setEventsDropdownOpen(false)}
                     >
                       {link.label}
-                      <ChevronDown className={`w-3 h-3 transition-transform duration-300 ease-in-out ${
-                        eventsDropdownOpen ? 'rotate-180' : 'rotate-0'
-                      }`} />
+                      <ChevronDown
+                        className={`w-3 h-3 transition-transform duration-300 ease-in-out ${
+                          eventsDropdownOpen ? "rotate-180" : "rotate-0"
+                        }`}
+                      />
                     </div>
                   ) : (
                     <Link
@@ -100,13 +147,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                       {link.label}
                     </Link>
                   )}
-                  
+
                   {link.hasDropdown && (
-                    <div 
+                    <div
                       className={`absolute top-full left-0 mt-1 w-56 bg-gray-700 border border-gray-600 rounded-lg shadow-xl z-50 max-h-80 overflow-y-auto transition-all duration-300 ease-in-out transform origin-top ${
-                        eventsDropdownOpen 
-                          ? 'opacity-100 scale-100 translate-y-0 visible' 
-                          : 'opacity-0 scale-95 -translate-y-2 invisible pointer-events-none'
+                        eventsDropdownOpen
+                          ? "opacity-100 scale-100 translate-y-0 visible"
+                          : "opacity-0 scale-95 -translate-y-2 invisible pointer-events-none"
                       }`}
                       onMouseEnter={() => setEventsDropdownOpen(true)}
                       onMouseLeave={() => setEventsDropdownOpen(false)}
@@ -117,12 +164,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                             key={item.path}
                             to={item.path}
                             className={`block px-4 py-3 text-sm text-white hover:bg-gray-600 transition-all duration-200 cursor-pointer border-l-4 border-transparent hover:border-white transform ${
-                              eventsDropdownOpen 
-                                ? 'translate-x-0 opacity-100' 
-                                : '-translate-x-2 opacity-0'
+                              eventsDropdownOpen
+                                ? "translate-x-0 opacity-100"
+                                : "-translate-x-2 opacity-0"
                             }`}
                             style={{
-                              transitionDelay: eventsDropdownOpen ? `${index * 50}ms` : '0ms'
+                              transitionDelay: eventsDropdownOpen ? `${index * 50}ms` : "0ms",
                             }}
                             onClick={() => setEventsDropdownOpen(false)}
                           >
@@ -139,11 +186,91 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <div className="flex items-center gap-2">
               {user ? (
                 <>
-                  <Button variant="ghost" size="icon" className="relative">
-                    <Bell className="w-5 h-5" />
-                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-secondary" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="relative" onClick={() => navigate('/profile')}>
+                  {/* Notification Bell */}
+                  <div className="relative" ref={notifRef}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="relative"
+                      onClick={handleBellClick}
+                      aria-label="Notifications"
+                    >
+                      <Bell className="w-5 h-5" />
+                      {unreadCount > 0 && (
+                        <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                          {unreadCount > 9 ? "9+" : unreadCount}
+                        </span>
+                      )}
+                    </Button>
+
+                    {/* Notification Dropdown */}
+                    {notifOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-80 bg-card border rounded-xl shadow-2xl z-50 overflow-hidden">
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
+                          <span className="font-semibold text-sm">Notifications</span>
+                          {unreadCount > 0 && (
+                            <button
+                              onClick={markAllRead}
+                              className="flex items-center gap-1 text-xs text-primary hover:underline"
+                            >
+                              <CheckCheck className="w-3 h-3" />
+                              Mark all read
+                            </button>
+                          )}
+                        </div>
+
+                        {/* List */}
+                        <div className="max-h-80 overflow-y-auto divide-y">
+                          {notifications.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
+                              <Bell className="w-7 h-7 opacity-30" />
+                              <span className="text-sm">No notifications yet</span>
+                            </div>
+                          ) : (
+                            notifications.map((notif) => (
+                              <div
+                                key={notif.id}
+                                onClick={() => handleNotifClick(notif)}
+                                className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/60 ${
+                                  !notif.read ? "bg-primary/5" : ""
+                                }`}
+                              >
+                                {notifIcon(notif.type)}
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-xs font-semibold truncate ${!notif.read ? "text-foreground" : "text-muted-foreground"}`}>
+                                    {notif.title}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                                    {notif.message}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground/70 mt-1">
+                                    {timeAgo(notif.timestamp)}
+                                  </p>
+                                </div>
+                                {!notif.read && (
+                                  <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1" />
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        {notifications.length > 0 && (
+                          <div className="px-4 py-2 border-t bg-muted/30 text-center">
+                            <button
+                              onClick={() => { markAllRead(); setNotifOpen(false); }}
+                              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              Clear all
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <Button variant="ghost" size="icon" className="relative" onClick={() => navigate("/profile")}>
                     <User className="w-5 h-5" />
                   </Button>
                   <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign Out">
@@ -208,7 +335,24 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   )}
                 </div>
               ))}
-              {!user && (
+              {user ? (
+                <div className="mt-4 pt-4 border-t flex flex-col gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start gap-2 relative"
+                    onClick={() => { setNotifOpen(true); setMobileOpen(false); }}
+                  >
+                    <Bell className="w-4 h-4" />
+                    Notifications
+                    {unreadCount > 0 && (
+                      <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
+                  </Button>
+                </div>
+              ) : (
                 <div className="mt-4 pt-4 border-t">
                   <Button variant="ghost" size="sm" asChild className="w-full justify-center">
                     <Link to="/auth" onClick={() => setMobileOpen(false)}>
@@ -257,7 +401,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </div>
             </div>
             <div className="mt-8 pt-6 border-t border-primary-foreground/20 text-center text-sm opacity-60">
-             Copyright &copy; 2026 Zetech University | Inventing your Future. All rights reserved.
+              Copyright &copy; 2026 Zetech University | Inventing your Future. All rights reserved.
             </div>
           </div>
         </footer>
