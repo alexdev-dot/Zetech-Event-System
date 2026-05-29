@@ -1552,7 +1552,7 @@ const AdminDashboard = () => {
                   ))}
                 </div>
               )}
-              <AdminQuickActions />
+              <AdminQuickActions onNavigate={setActiveView} />
             </>
           )}
           {activeView === "pending" && (

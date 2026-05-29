@@ -311,6 +311,11 @@ export const api = {
         body: JSON.stringify({ message }),
       }).then(handleResponse),
 
+    getStudentSignups: () =>
+      fetch(`${API_BASE_URL}/admin/students/signups`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+
     updateProfile: (data: { name: string }) =>
       fetch(`${API_BASE_URL}/admin/profile`, {
         method: "PUT",

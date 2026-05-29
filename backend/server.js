@@ -1848,6 +1848,48 @@ app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
   }
 });
 
+// Student registration signups over time (day/week/month)
+app.get("/api/admin/students/signups", requireAdmin, async (_req, res) => {
+  try {
+    const [daily, weekly, monthly, totalRes] = await Promise.all([
+      pool.query(`
+        SELECT TO_CHAR(DATE_TRUNC('day', created_at AT TIME ZONE 'UTC'), 'Mon DD') AS label,
+               COUNT(*)::int AS count
+        FROM student_registrations
+        WHERE created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
+        ORDER BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
+      `),
+      pool.query(`
+        SELECT TO_CHAR(DATE_TRUNC('week', created_at AT TIME ZONE 'UTC'), 'Mon DD') AS label,
+               COUNT(*)::int AS count
+        FROM student_registrations
+        WHERE created_at >= NOW() - INTERVAL '12 weeks'
+        GROUP BY DATE_TRUNC('week', created_at AT TIME ZONE 'UTC')
+        ORDER BY DATE_TRUNC('week', created_at AT TIME ZONE 'UTC')
+      `),
+      pool.query(`
+        SELECT TO_CHAR(DATE_TRUNC('month', created_at AT TIME ZONE 'UTC'), 'Mon YYYY') AS label,
+               COUNT(*)::int AS count
+        FROM student_registrations
+        WHERE created_at >= NOW() - INTERVAL '12 months'
+        GROUP BY DATE_TRUNC('month', created_at AT TIME ZONE 'UTC')
+        ORDER BY DATE_TRUNC('month', created_at AT TIME ZONE 'UTC')
+      `),
+      pool.query(`SELECT COUNT(*)::int AS total FROM student_registrations WHERE status != 'deleted'`),
+    ]);
+    res.json({
+      daily: daily.rows,
+      weekly: weekly.rows,
+      monthly: monthly.rows,
+      total: totalRes.rows[0]?.total || 0,
+    });
+  } catch (err) {
+    console.error("Student signups error:", err);
+    res.status(500).json({ message: "Failed to load student signups" });
+  }
+});
+
 app.get("/api/admin/activity", requireAdmin, async (req, res) => {
   try {
     const [
