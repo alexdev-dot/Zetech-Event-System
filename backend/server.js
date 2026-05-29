@@ -542,6 +542,74 @@ async function ensureDatabaseSchema() {
     CREATE INDEX IF NOT EXISTS idx_event_reg_status       ON event_registrations(status);
   `);
 
+  // ── Engagement tables ────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_reactions (
+      id         SERIAL PRIMARY KEY,
+      event_id   INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      student_id INT NOT NULL REFERENCES student_registrations(id) ON DELETE CASCADE,
+      reaction   VARCHAR(20) NOT NULL CHECK (reaction IN ('fire','heart','wow')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (event_id, student_id)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_comments (
+      id         SERIAL PRIMARY KEY,
+      event_id   INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      student_id INT NOT NULL REFERENCES student_registrations(id) ON DELETE CASCADE,
+      content    TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_waitlist (
+      id         SERIAL PRIMARY KEY,
+      event_id   INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      student_id INT NOT NULL REFERENCES student_registrations(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (event_id, student_id)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_gallery (
+      id          SERIAL PRIMARY KEY,
+      event_id    INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      image_url   VARCHAR(500) NOT NULL,
+      caption     TEXT,
+      uploaded_by INT REFERENCES admins(id) ON DELETE SET NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_polls (
+      id         SERIAL PRIMARY KEY,
+      event_id   INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      question   TEXT NOT NULL,
+      options    JSONB NOT NULL DEFAULT '[]',
+      created_by INT REFERENCES admins(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_poll_votes (
+      id           SERIAL PRIMARY KEY,
+      poll_id      INT NOT NULL REFERENCES event_polls(id) ON DELETE CASCADE,
+      student_id   INT NOT NULL REFERENCES student_registrations(id) ON DELETE CASCADE,
+      option_index INT NOT NULL,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (poll_id, student_id)
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_reactions_event  ON event_reactions(event_id);
+    CREATE INDEX IF NOT EXISTS idx_comments_event   ON event_comments(event_id);
+    CREATE INDEX IF NOT EXISTS idx_waitlist_event   ON event_waitlist(event_id);
+    CREATE INDEX IF NOT EXISTS idx_gallery_event    ON event_gallery(event_id);
+    CREATE INDEX IF NOT EXISTS idx_polls_event      ON event_polls(event_id);
+    CREATE INDEX IF NOT EXISTS idx_poll_votes_poll  ON event_poll_votes(poll_id)
+  `);
+
   console.log("Database schema and indexes ensured ✓");
 }
 
@@ -2715,6 +2783,362 @@ async function seedDefaultAdmin() {
     console.warn("Admin seed warning:", err.message);
   }
 }
+
+// ─── REACTIONS ────────────────────────────────────────────────────────────────
+app.get("/api/events/:id/reactions", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid event ID" });
+  try {
+    const { rows } = await pool.query(
+      `SELECT reaction, COUNT(*) as count FROM event_reactions WHERE event_id = $1 GROUP BY reaction`,
+      [id]
+    );
+    const counts = { fire: 0, heart: 0, wow: 0 };
+    rows.forEach(r => { counts[r.reaction] = parseInt(r.count); });
+    let userReaction = null;
+    const token = req.headers.authorization?.split(" ")[1];
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role === "user") {
+          const { rows: ur } = await pool.query(
+            `SELECT reaction FROM event_reactions WHERE event_id = $1 AND student_id = $2`,
+            [id, decoded.id]
+          );
+          if (ur.length > 0) userReaction = ur[0].reaction;
+        }
+      } catch (_) {}
+    }
+    res.json({ counts, userReaction });
+  } catch (err) {
+    console.error("Get reactions error:", err);
+    res.status(500).json({ message: "Failed to get reactions" });
+  }
+});
+
+app.post("/api/events/:id/react", authenticateToken, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid event ID" });
+  const { type } = req.body;
+  if (!["fire", "heart", "wow"].includes(type))
+    return res.status(400).json({ message: "Invalid reaction type" });
+  const studentId = req.authUser?.id;
+  if (!studentId || req.authUser?.role !== "user")
+    return res.status(403).json({ message: "Students only" });
+  try {
+    const { rows: existing } = await pool.query(
+      `SELECT reaction FROM event_reactions WHERE event_id = $1 AND student_id = $2`,
+      [id, studentId]
+    );
+    let userReaction = null;
+    if (existing.length > 0 && existing[0].reaction === type) {
+      await pool.query(`DELETE FROM event_reactions WHERE event_id = $1 AND student_id = $2`, [id, studentId]);
+    } else {
+      await pool.query(
+        `INSERT INTO event_reactions (event_id, student_id, reaction) VALUES ($1,$2,$3)
+         ON CONFLICT (event_id, student_id) DO UPDATE SET reaction=$3, created_at=NOW()`,
+        [id, studentId, type]
+      );
+      userReaction = type;
+    }
+    const { rows } = await pool.query(
+      `SELECT reaction, COUNT(*) as count FROM event_reactions WHERE event_id = $1 GROUP BY reaction`,
+      [id]
+    );
+    const counts = { fire: 0, heart: 0, wow: 0 };
+    rows.forEach(r => { counts[r.reaction] = parseInt(r.count); });
+    emitToAll("event:reaction-update", { eventId: id, counts });
+    res.json({ counts, userReaction });
+  } catch (err) {
+    console.error("React error:", err);
+    res.status(500).json({ message: "Failed to react" });
+  }
+});
+
+// ─── COMMENTS ─────────────────────────────────────────────────────────────────
+app.get("/api/events/:id/comments", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid event ID" });
+  try {
+    const { rows } = await pool.query(
+      `SELECT ec.id, ec.content, ec.created_at,
+              sr.first_name || ' ' || sr.last_name AS student_name,
+              sr.id AS student_id
+       FROM event_comments ec
+       JOIN student_registrations sr ON sr.id = ec.student_id
+       WHERE ec.event_id = $1
+       ORDER BY ec.created_at ASC LIMIT 100`,
+      [id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Get comments error:", err);
+    res.status(500).json({ message: "Failed to get comments" });
+  }
+});
+
+app.post("/api/events/:id/comments", authenticateToken, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid event ID" });
+  const studentId = req.authUser?.id;
+  if (!studentId || req.authUser?.role !== "user")
+    return res.status(403).json({ message: "Students only" });
+  const { content } = req.body;
+  if (!content?.trim()) return res.status(400).json({ message: "Comment cannot be empty" });
+  if (content.length > 500) return res.status(400).json({ message: "Max 500 chars" });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO event_comments (event_id, student_id, content) VALUES ($1,$2,$3) RETURNING id, content, created_at`,
+      [id, studentId, content.trim()]
+    );
+    const { rows: sr } = await pool.query(
+      `SELECT first_name || ' ' || last_name AS student_name FROM student_registrations WHERE id = $1`,
+      [studentId]
+    );
+    const fullComment = { ...rows[0], student_name: sr[0]?.student_name, student_id: studentId };
+    emitToAll(`event:new-comment:${id}`, fullComment);
+    res.status(201).json(fullComment);
+  } catch (err) {
+    console.error("Post comment error:", err);
+    res.status(500).json({ message: "Failed to post comment" });
+  }
+});
+
+app.delete("/api/events/:id/comments/:commentId", authenticateToken, async (req, res) => {
+  const eventId = parseInt(req.params.id);
+  const commentId = parseInt(req.params.commentId);
+  const studentId = req.authUser?.id;
+  if (!studentId || req.authUser?.role !== "user")
+    return res.status(403).json({ message: "Students only" });
+  try {
+    const result = await pool.query(
+      `DELETE FROM event_comments WHERE id=$1 AND event_id=$2 AND student_id=$3`,
+      [commentId, eventId, studentId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ message: "Comment not found" });
+    res.json({ message: "Comment deleted" });
+  } catch (err) {
+    console.error("Delete comment error:", err);
+    res.status(500).json({ message: "Failed to delete comment" });
+  }
+});
+
+// ─── ATTENDEES (Who's Going) ──────────────────────────────────────────────────
+app.get("/api/events/:id/attendees", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid event ID" });
+  try {
+    const { rows } = await pool.query(
+      `SELECT sr.id, sr.first_name || ' ' || LEFT(sr.last_name, 1) || '.' AS display_name
+       FROM event_registrations er
+       JOIN student_registrations sr ON sr.id = er.student_id
+       WHERE er.event_id = $1 AND er.status = 'registered'
+       ORDER BY er.registration_date DESC LIMIT 20`,
+      [id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Get attendees error:", err);
+    res.status(500).json({ message: "Failed to get attendees" });
+  }
+});
+
+// ─── WAITLIST ─────────────────────────────────────────────────────────────────
+app.get("/api/events/:id/waitlist/status", authenticateToken, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const studentId = req.authUser?.id;
+  if (!studentId || req.authUser?.role !== "user")
+    return res.json({ position: null, total: 0, onWaitlist: false });
+  try {
+    const { rows: myRow } = await pool.query(
+      `SELECT created_at FROM event_waitlist WHERE event_id=$1 AND student_id=$2`,
+      [id, studentId]
+    );
+    const { rows: totalRows } = await pool.query(
+      `SELECT COUNT(*) AS total FROM event_waitlist WHERE event_id=$1`, [id]
+    );
+    if (myRow.length === 0) {
+      return res.json({ position: null, total: parseInt(totalRows[0]?.total || 0), onWaitlist: false });
+    }
+    const { rows: posRows } = await pool.query(
+      `SELECT COUNT(*) AS position FROM event_waitlist WHERE event_id=$1 AND created_at <= $2`,
+      [id, myRow[0].created_at]
+    );
+    res.json({
+      position: parseInt(posRows[0]?.position || 1),
+      total: parseInt(totalRows[0]?.total || 0),
+      onWaitlist: true
+    });
+  } catch (err) {
+    console.error("Get waitlist error:", err);
+    res.status(500).json({ message: "Failed to get waitlist" });
+  }
+});
+
+app.post("/api/events/:id/waitlist", authenticateToken, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const studentId = req.authUser?.id;
+  if (!studentId || req.authUser?.role !== "user")
+    return res.status(403).json({ message: "Students only" });
+  try {
+    await pool.query(
+      `INSERT INTO event_waitlist (event_id, student_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+      [id, studentId]
+    );
+    const { rows } = await pool.query(
+      `SELECT COUNT(*) AS position FROM event_waitlist WHERE event_id=$1 AND created_at <= (
+         SELECT created_at FROM event_waitlist WHERE event_id=$1 AND student_id=$2
+       )`,
+      [id, studentId]
+    );
+    res.status(201).json({ position: parseInt(rows[0]?.position || 1), onWaitlist: true });
+  } catch (err) {
+    console.error("Join waitlist error:", err);
+    res.status(500).json({ message: "Failed to join waitlist" });
+  }
+});
+
+app.delete("/api/events/:id/waitlist", authenticateToken, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const studentId = req.authUser?.id;
+  if (!studentId || req.authUser?.role !== "user")
+    return res.status(403).json({ message: "Students only" });
+  try {
+    await pool.query(`DELETE FROM event_waitlist WHERE event_id=$1 AND student_id=$2`, [id, studentId]);
+    res.json({ message: "Removed from waitlist", onWaitlist: false });
+  } catch (err) {
+    console.error("Leave waitlist error:", err);
+    res.status(500).json({ message: "Failed to leave waitlist" });
+  }
+});
+
+// ─── GALLERY ──────────────────────────────────────────────────────────────────
+app.get("/api/events/:id/gallery", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid event ID" });
+  try {
+    const { rows } = await pool.query(
+      `SELECT eg.id, eg.image_url, eg.caption, eg.created_at, a.name AS uploader_name
+       FROM event_gallery eg LEFT JOIN admins a ON a.id = eg.uploaded_by
+       WHERE eg.event_id = $1 ORDER BY eg.created_at DESC`,
+      [id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Get gallery error:", err);
+    res.status(500).json({ message: "Failed to get gallery" });
+  }
+});
+
+app.post("/api/events/:id/gallery", requireAdmin, upload.single("image"), async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid event ID" });
+  if (!req.file) return res.status(400).json({ message: "No image uploaded" });
+  const adminId = req.authUser?.id;
+  const imageUrl = `/uploads/${req.file.filename}`;
+  const caption = req.body.caption || "";
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO event_gallery (event_id, image_url, caption, uploaded_by) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [id, imageUrl, caption, adminId]
+    );
+    emitToAll("event:gallery-update", { eventId: id });
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error("Upload gallery error:", err);
+    res.status(500).json({ message: "Failed to upload image" });
+  }
+});
+
+// ─── POLLS ────────────────────────────────────────────────────────────────────
+app.get("/api/events/:id/poll", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid event ID" });
+  try {
+    const { rows: polls } = await pool.query(
+      `SELECT * FROM event_polls WHERE event_id=$1 ORDER BY created_at DESC LIMIT 1`, [id]
+    );
+    if (polls.length === 0) return res.json(null);
+    const poll = polls[0];
+    const { rows: votes } = await pool.query(
+      `SELECT option_index, COUNT(*) as count FROM event_poll_votes WHERE poll_id=$1 GROUP BY option_index`,
+      [poll.id]
+    );
+    const voteCounts = {};
+    votes.forEach(v => { voteCounts[v.option_index] = parseInt(v.count); });
+    const totalVotes = votes.reduce((s, v) => s + parseInt(v.count), 0);
+    let userVote = null;
+    const token = req.headers.authorization?.split(" ")[1];
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role === "user") {
+          const { rows: uv } = await pool.query(
+            `SELECT option_index FROM event_poll_votes WHERE poll_id=$1 AND student_id=$2`,
+            [poll.id, decoded.id]
+          );
+          if (uv.length > 0) userVote = uv[0].option_index;
+        }
+      } catch (_) {}
+    }
+    res.json({ ...poll, voteCounts, totalVotes, userVote });
+  } catch (err) {
+    console.error("Get poll error:", err);
+    res.status(500).json({ message: "Failed to get poll" });
+  }
+});
+
+app.post("/api/events/:id/poll", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { question, options } = req.body;
+  if (!question || !Array.isArray(options) || options.length < 2)
+    return res.status(400).json({ message: "Question and at least 2 options required" });
+  const adminId = req.authUser?.id;
+  try {
+    await pool.query(`DELETE FROM event_polls WHERE event_id=$1`, [id]);
+    const { rows } = await pool.query(
+      `INSERT INTO event_polls (event_id, question, options, created_by) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [id, question, JSON.stringify(options), adminId]
+    );
+    emitToAll("event:poll-update", { eventId: id });
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error("Create poll error:", err);
+    res.status(500).json({ message: "Failed to create poll" });
+  }
+});
+
+app.post("/api/events/:id/poll/vote", authenticateToken, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { optionIndex } = req.body;
+  const studentId = req.authUser?.id;
+  if (!studentId || req.authUser?.role !== "user")
+    return res.status(403).json({ message: "Students only" });
+  try {
+    const { rows: polls } = await pool.query(
+      `SELECT id FROM event_polls WHERE event_id=$1 ORDER BY created_at DESC LIMIT 1`, [id]
+    );
+    if (polls.length === 0) return res.status(404).json({ message: "No poll found" });
+    const pollId = polls[0].id;
+    await pool.query(
+      `INSERT INTO event_poll_votes (poll_id, student_id, option_index) VALUES ($1,$2,$3)
+       ON CONFLICT (poll_id, student_id) DO UPDATE SET option_index=$3`,
+      [pollId, studentId, optionIndex]
+    );
+    const { rows: votes } = await pool.query(
+      `SELECT option_index, COUNT(*) as count FROM event_poll_votes WHERE poll_id=$1 GROUP BY option_index`,
+      [pollId]
+    );
+    const voteCounts = {};
+    votes.forEach(v => { voteCounts[v.option_index] = parseInt(v.count); });
+    const totalVotes = votes.reduce((s, v) => s + parseInt(v.count), 0);
+    emitToAll("event:poll-update", { eventId: id, voteCounts, totalVotes });
+    res.json({ voteCounts, totalVotes, userVote: optionIndex });
+  } catch (err) {
+    console.error("Vote poll error:", err);
+    res.status(500).json({ message: "Failed to vote" });
+  }
+});
 
 async function startServer() {
   try {

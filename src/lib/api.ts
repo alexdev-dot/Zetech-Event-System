@@ -398,4 +398,90 @@ export const api = {
   },
 
   health: () => fetch(`${API_BASE_URL}/health`).then(handleResponse),
+
+  reactions: {
+    get: (eventId: string | number) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/reactions`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+    react: (eventId: string | number, type: "fire" | "heart" | "wow") =>
+      fetch(`${API_BASE_URL}/events/${eventId}/react`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      }).then(handleResponse),
+  },
+
+  comments: {
+    get: (eventId: string | number) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/comments`).then(handleResponse),
+    post: (eventId: string | number, content: string) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/comments`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      }).then(handleResponse),
+    delete: (eventId: string | number, commentId: number) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/comments/${commentId}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      }).then(handleResponse),
+  },
+
+  attendees: {
+    get: (eventId: string | number) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/attendees`).then(handleResponse),
+  },
+
+  waitlist: {
+    getStatus: (eventId: string | number) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/waitlist/status`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+    join: (eventId: string | number) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/waitlist`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }).then(handleResponse),
+    leave: (eventId: string | number) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/waitlist`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      }).then(handleResponse),
+  },
+
+  gallery: {
+    get: (eventId: string | number) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/gallery`).then(handleResponse),
+    upload: (eventId: string | number, file: File, caption?: string) => {
+      const formData = new FormData();
+      formData.append("image", file);
+      if (caption) formData.append("caption", caption);
+      return fetch(`${API_BASE_URL}/events/${eventId}/gallery`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: formData,
+      }).then(handleResponse);
+    },
+  },
+
+  polls: {
+    get: (eventId: string | number) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/poll`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
+    create: (eventId: string | number, question: string, options: string[]) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/poll`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ question, options }),
+      }).then(handleResponse),
+    vote: (eventId: string | number, optionIndex: number) =>
+      fetch(`${API_BASE_URL}/events/${eventId}/poll/vote`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ optionIndex }),
+      }).then(handleResponse),
+  },
 };
