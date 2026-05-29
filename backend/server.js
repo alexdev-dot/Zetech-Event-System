@@ -610,6 +610,9 @@ async function ensureDatabaseSchema() {
     CREATE INDEX IF NOT EXISTS idx_poll_votes_poll  ON event_poll_votes(poll_id)
   `);
 
+  // Add end_date to events if not present (multi-day event support)
+  await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS end_date DATE`);
+
   console.log("Database schema and indexes ensured ✓");
 }
 
@@ -1232,13 +1235,15 @@ app.post("/api/events", requireAdminOrLeader, async (req, res) => {
   const eventStatus = isAdmin ? "upcoming" : "pending";
 
   try {
+    const endDate = req.body.endDate || null;
     const insertRes = await pool.query(
-      `INSERT INTO events (title, description, date, time, location, category, max_participants, image_url, created_by, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+      `INSERT INTO events (title, description, date, end_date, time, location, category, max_participants, image_url, created_by, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
       [
         title.trim(),
         description.trim(),
         date,
+        endDate,
         time,
         location.trim(),
         category,
