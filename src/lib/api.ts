@@ -310,6 +310,51 @@ export const api = {
         headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
       }).then(handleResponse),
+
+    updateProfile: (data: { name: string }) =>
+      fetch(`${API_BASE_URL}/admin/profile`, {
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).then(handleResponse),
+
+    exportStudents: async () => {
+      const res = await fetch(`${API_BASE_URL}/admin/export/students`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error((d as any).message || "Export failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `students_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+
+    exportEvents: async () => {
+      const res = await fetch(`${API_BASE_URL}/admin/export/events`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error((d as any).message || "Export failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `events_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
   },
 
   clubLeader: {

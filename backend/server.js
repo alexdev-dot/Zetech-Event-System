@@ -12,6 +12,7 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import compression from "compression";
 import { pool, testConnection } from "./db.js";
 
 const app = express();
@@ -102,38 +103,67 @@ const upload = multer({
   },
 });
 
+// Separate multer instance using memory storage for CSV imports
+const uploadMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB max for CSV
+});
+
 // ─── SECURITY MIDDLEWARE ───────────────────────────────────────────────────────
 
 app.use(
   helmet({
     crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: false,
-  }),
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        connectSrc: ["'self'", "wss:", "ws:", "https:"],
+        fontSrc: ["'self'", "data:", "https:"],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+        upgradeInsecureRequests: null,
+      },
+    },
+  })
 );
 
-const allowedOrigins = [
-  process.env.CLIENT_URL,
-  "http://localhost:5173",
-  "http://localhost:3001",
-].filter(Boolean);
+// CORS – allow same-origin + configured origins + Replit preview domains
+const allowedOrigins = new Set(
+  [
+    process.env.CLIENT_URL,
+    "http://localhost:5173",
+    "http://localhost:5000",
+    "http://localhost:3001",
+  ].filter(Boolean)
+);
 
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin || allowedOrigins.some((o) => origin.startsWith(o))) return cb(null, true);
-      cb(null, true); // allow all in dev; tighten in prod via env
+      if (!origin) return cb(null, true); // same-origin or server-to-server
+      if (allowedOrigins.has(origin)) return cb(null, true);
+      if (origin.endsWith(".replit.dev") || origin.endsWith(".replit.app"))
+        return cb(null, true);
+      if (process.env.NODE_ENV === "production") return cb(null, false);
+      cb(null, true); // permissive in dev
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-  }),
+  })
 );
+
+// Gzip compression – reduces JSON/text payloads by ~70%, critical for 100k+ users
+app.use(compression());
 
 // ─── RATE LIMITERS ────────────────────────────────────────────────────────────
 
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500,
+  windowMs: 15 * 60 * 1000,
+  max: 2000, // 2000 req/15 min per IP — supports 100k+ concurrent users
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many requests, please try again later." },
@@ -142,7 +172,7 @@ const globalLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 10, // 10 login attempts per 15 min — brute force defence layer 1
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many login attempts, please try again in 15 minutes." },
@@ -152,6 +182,12 @@ const uploadLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
   message: { message: "Upload rate limit exceeded." },
+});
+
+const adminWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: { message: "Too many write operations, please slow down." },
 });
 
 app.set("trust proxy", 1);
@@ -501,6 +537,44 @@ async function ensureDatabaseSchema() {
   console.log("Database schema and indexes ensured ✓");
 }
 
+// ─── BRUTE FORCE PROTECTION ───────────────────────────────────────────────────
+// Layer 2 defence (rate limiter is layer 1) – per-IP failure tracking
+
+const loginFailures = new Map(); // ip → { count, lockedUntil }
+const BRUTE_MAX = 5;
+const BRUTE_LOCK_MS = 15 * 60 * 1000; // 15 minutes
+
+function checkBruteForce(req, res, next) {
+  const ip = req.ip || "unknown";
+  const rec = loginFailures.get(ip);
+  if (rec?.lockedUntil && Date.now() < rec.lockedUntil) {
+    const mins = Math.ceil((rec.lockedUntil - Date.now()) / 60000);
+    return res.status(429).json({
+      message: `Too many failed attempts. Account locked for ${mins} more minute(s).`,
+    });
+  }
+  next();
+}
+function recordLoginFailure(ip) {
+  const rec = loginFailures.get(ip) || { count: 0, lockedUntil: null };
+  rec.count++;
+  if (rec.count >= BRUTE_MAX) {
+    rec.lockedUntil = Date.now() + BRUTE_LOCK_MS;
+    rec.count = 0;
+    console.warn(`[Security] IP ${ip} brute-force locked for 15 min`);
+  }
+  loginFailures.set(ip, rec);
+}
+function clearLoginFailures(ip) {
+  loginFailures.delete(ip);
+}
+// Clean up expired records every 30 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, rec] of loginFailures)
+    if (!rec.lockedUntil || rec.lockedUntil < now) loginFailures.delete(ip);
+}, 30 * 60 * 1000);
+
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
 
 function authenticateToken(req, res, next) {
@@ -591,28 +665,26 @@ function requireAdminOrLeader(req, res, next) {
 // ─── CATEGORIES (public) ──────────────────────────────────────────────────────
 
 app.get("/api/categories", async (_req, res) => {
+  const cacheKey = "pub_categories";
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    res.setHeader("Cache-Control", "public, max-age=60");
+    return res.json(cached);
+  }
   try {
-    const result = await pool.query(`
-      SELECT
-        ec.id,
-        ec.name,
-        ec.display_order,
-        COALESCE(
-          JSON_AGG(
-            JSON_BUILD_OBJECT(
-              'id',            es.id,
-              'name',          es.name,
-              'display_order', es.display_order
-            ) ORDER BY es.display_order, es.id
-          ) FILTER (WHERE es.id IS NOT NULL),
-          '[]'::JSON
-        ) AS subcategories
-      FROM event_categories ec
-      LEFT JOIN event_subcategories es ON es.category_id = ec.id
-      GROUP BY ec.id, ec.name, ec.display_order
-      ORDER BY ec.display_order, ec.id
-    `);
-    res.json(result.rows);
+    const [catsRes, subsRes] = await Promise.all([
+      pool.query(`SELECT id, name, display_order FROM event_categories ORDER BY display_order, id`),
+      pool.query(`SELECT id, category_id, name, display_order FROM event_subcategories ORDER BY display_order, id`),
+    ]);
+    const cats = (catsRes.rows || []).map((c) => ({
+      ...c,
+      subcategories: (subsRes.rows || []).filter(
+        (s) => Number(s.category_id) === Number(c.id)
+      ),
+    }));
+    cache.set(cacheKey, cats, 300); // 5-minute cache
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.json(cats);
   } catch (err) {
     console.error("Get categories error:", err);
     res.status(500).json({ message: "Failed to fetch categories" });
@@ -698,7 +770,7 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
   }
 });
 
-app.post("/api/auth/login", authLimiter, async (req, res) => {
+app.post("/api/auth/login", authLimiter, checkBruteForce, async (req, res) => {
   const { admissionNumber, password } = req.body;
   if (!admissionNumber || !password)
     return res
@@ -712,19 +784,22 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
       `SELECT id, first_name, last_name, admission_number, email, password, status FROM student_registrations WHERE admission_number = $1 LIMIT 1`,
       [admissionNumber.trim()],
     );
-    if (!studentsRes.rows?.length)
-      return res
-        .status(401)
-        .json({ message: "Invalid admission number or password" });
+    if (!studentsRes.rows?.length) {
+      recordLoginFailure(req.ip);
+      return res.status(401).json({ message: "Invalid admission number or password" });
+    }
     const student = studentsRes.rows[0];
-    if (student.status === "deleted")
+    if (student.status === "deleted") {
+      recordLoginFailure(req.ip);
       return res.status(401).json({ message: "Account has been deactivated" });
+    }
 
     const valid = await bcrypt.compare(password, student.password);
-    if (!valid)
-      return res
-        .status(401)
-        .json({ message: "Invalid admission number or password" });
+    if (!valid) {
+      recordLoginFailure(req.ip);
+      return res.status(401).json({ message: "Invalid admission number or password" });
+    }
+    clearLoginFailures(req.ip);
 
     await pool.query(
       `UPDATE student_registrations SET last_login = $1 WHERE id = $2`,
@@ -751,7 +826,7 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
 
 // ─── ADMIN / CLUB LEADER AUTH ─────────────────────────────────────────────────
 
-app.post("/api/auth/admin/login", authLimiter, async (req, res) => {
+app.post("/api/auth/admin/login", authLimiter, checkBruteForce, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password)
     return res.status(400).json({ message: "Email and password are required" });
@@ -764,8 +839,10 @@ app.post("/api/auth/admin/login", authLimiter, async (req, res) => {
       `SELECT id, admin_email, password_hash FROM admins WHERE admin_email = $1 LIMIT 1`,
       [email.trim().toLowerCase()],
     );
-    if (!adminsRes.rows?.length)
+    if (!adminsRes.rows?.length) {
+      recordLoginFailure(req.ip);
       return res.status(401).json({ message: "Invalid credentials" });
+    }
     const admin = adminsRes.rows[0];
     let valid = false;
     const hash = admin.password_hash || "";
@@ -774,7 +851,11 @@ app.post("/api/auth/admin/login", authLimiter, async (req, res) => {
     } else {
       valid = password === hash;
     }
-    if (!valid) return res.status(401).json({ message: "Invalid credentials" });
+    if (!valid) {
+      recordLoginFailure(req.ip);
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+    clearLoginFailures(req.ip);
 
     // Try to read extra columns if they exist (graceful fallback)
     let role = "admin",
@@ -2147,27 +2228,17 @@ app.delete("/api/admin/club-leaders/:id", requireAdmin, async (req, res) => {
 // GET all categories (admin view — same as public but admin-gated for future use)
 app.get("/api/admin/categories", requireAdmin, async (_req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT
-        ec.id,
-        ec.name,
-        ec.display_order,
-        COALESCE(
-          JSON_AGG(
-            JSON_BUILD_OBJECT(
-              'id',            es.id,
-              'name',          es.name,
-              'display_order', es.display_order
-            ) ORDER BY es.display_order, es.id
-          ) FILTER (WHERE es.id IS NOT NULL),
-          '[]'::JSON
-        ) AS subcategories
-      FROM event_categories ec
-      LEFT JOIN event_subcategories es ON es.category_id = ec.id
-      GROUP BY ec.id, ec.name, ec.display_order
-      ORDER BY ec.display_order, ec.id
-    `);
-    res.json(result.rows);
+    const [catsRes, subsRes] = await Promise.all([
+      pool.query(`SELECT id, name, display_order FROM event_categories ORDER BY display_order, id`),
+      pool.query(`SELECT id, category_id, name, display_order FROM event_subcategories ORDER BY display_order, id`),
+    ]);
+    const cats = (catsRes.rows || []).map((c) => ({
+      ...c,
+      subcategories: (subsRes.rows || []).filter(
+        (s) => Number(s.category_id) === Number(c.id)
+      ),
+    }));
+    res.json(cats);
   } catch (err) {
     console.error("Admin get categories error:", err);
     res.status(500).json({ message: "Failed to fetch categories" });
@@ -2185,6 +2256,7 @@ app.post("/api/admin/categories", requireAdmin, async (req, res) => {
       `INSERT INTO event_categories (name, display_order) VALUES ($1, $2) RETURNING *`,
       [name.trim(), nextOrd]
     );
+    cache.del("pub_categories");
     res.status(201).json(result.rows[0]);
   } catch (err) {
     if (err.code === "23505") return res.status(409).json({ message: "Category already exists" });
@@ -2205,6 +2277,7 @@ app.put("/api/admin/categories/:id", requireAdmin, async (req, res) => {
       [name.trim(), id]
     );
     if (!result.rows.length) return res.status(404).json({ message: "Category not found" });
+    cache.del("pub_categories");
     res.json(result.rows[0]);
   } catch (err) {
     if (err.code === "23505") return res.status(409).json({ message: "Category name already in use" });
@@ -2220,6 +2293,7 @@ app.delete("/api/admin/categories/:id", requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(`DELETE FROM event_categories WHERE id = $1 RETURNING id`, [id]);
     if (!result.rows.length) return res.status(404).json({ message: "Category not found" });
+    cache.del("pub_categories");
     res.json({ message: "Category deleted" });
   } catch (err) {
     console.error("Delete category error:", err);
@@ -2243,6 +2317,7 @@ app.post("/api/admin/categories/:id/subcategories", requireAdmin, async (req, re
       `INSERT INTO event_subcategories (category_id, name, display_order) VALUES ($1, $2, $3) RETURNING *`,
       [categoryId, name.trim(), nextOrd]
     );
+    cache.del("pub_categories");
     res.status(201).json(result.rows[0]);
   } catch (err) {
     if (err.code === "23505") return res.status(409).json({ message: "Sub-category already exists in this category" });
@@ -2264,6 +2339,7 @@ app.put("/api/admin/subcategories/:id", requireAdmin, async (req, res) => {
       [name.trim(), id]
     );
     if (!result.rows.length) return res.status(404).json({ message: "Sub-category not found" });
+    cache.del("pub_categories");
     res.json(result.rows[0]);
   } catch (err) {
     if (err.code === "23505") return res.status(409).json({ message: "Sub-category name already exists in this category" });
@@ -2279,10 +2355,145 @@ app.delete("/api/admin/subcategories/:id", requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(`DELETE FROM event_subcategories WHERE id = $1 RETURNING id`, [id]);
     if (!result.rows.length) return res.status(404).json({ message: "Sub-category not found" });
+    cache.del("pub_categories");
     res.json({ message: "Sub-category deleted" });
   } catch (err) {
     console.error("Delete subcategory error:", err);
     res.status(500).json({ message: "Failed to delete sub-category" });
+  }
+});
+
+// ─── ADMIN: EXPORT ────────────────────────────────────────────────────────────
+
+app.get("/api/admin/export/students", requireAdmin, async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT admission_number, first_name, last_name, email, COALESCE(phone,'') AS phone, status,
+              TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') AS registered_at
+       FROM student_registrations WHERE status != 'deleted' ORDER BY created_at DESC`
+    );
+    const csvLine = (vals) =>
+      vals.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",");
+    const header = "Admission Number,First Name,Last Name,Email,Phone,Status,Registered At";
+    const body = result.rows
+      .map((r) => csvLine([r.admission_number, r.first_name, r.last_name, r.email, r.phone, r.status, r.registered_at]))
+      .join("\n");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="students_${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(header + "\n" + body);
+  } catch (err) {
+    console.error("Export students error:", err);
+    res.status(500).json({ message: "Export failed" });
+  }
+});
+
+app.get("/api/admin/export/events", requireAdmin, async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT e.title, e.description, e.date, e.time, e.location, e.category,
+              COALESCE(e.max_participants::text,'Unlimited') AS max_participants, e.status,
+              COALESCE(a.name, a.admin_email,'Unknown') AS creator,
+              TO_CHAR(e.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') AS created_at
+       FROM events e LEFT JOIN admins a ON a.id = e.created_by ORDER BY e.created_at DESC`
+    );
+    const csvLine = (vals) =>
+      vals.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",");
+    const header = "Title,Description,Date,Time,Location,Category,Max Participants,Status,Created By,Created At";
+    const body = result.rows
+      .map((r) => csvLine([r.title, r.description, r.date, r.time, r.location, r.category, r.max_participants, r.status, r.creator, r.created_at]))
+      .join("\n");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="events_${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(header + "\n" + body);
+  } catch (err) {
+    console.error("Export events error:", err);
+    res.status(500).json({ message: "Export failed" });
+  }
+});
+
+// ─── ADMIN: CSV IMPORT ────────────────────────────────────────────────────────
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+app.post("/api/admin/import/students", requireAdmin, uploadLimiter, uploadMemory.single("csv"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "CSV file is required" });
+  try {
+    const content = req.file.buffer.toString("utf8").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const lines = content.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2)
+      return res.status(400).json({ message: "CSV must have a header row and at least one data row" });
+
+    let imported = 0;
+    let skipped = 0;
+    const errors = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseCSVLine(lines[i]);
+      const [admissionNumber, firstName, lastName, email, phone, rawPassword] = cols;
+      if (!admissionNumber || !firstName || !lastName || !email) {
+        errors.push(`Row ${i + 1}: missing required fields (admissionNumber, firstName, lastName, email)`);
+        continue;
+      }
+      try {
+        const hashedPw = await bcrypt.hash(rawPassword || "Zetech@2024", 10);
+        const r = await pool.query(
+          `INSERT INTO student_registrations (admission_number, first_name, last_name, email, phone, password)
+           VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING RETURNING id`,
+          [admissionNumber.trim(), firstName.trim(), lastName.trim(), email.trim().toLowerCase(), phone?.trim() || null, hashedPw]
+        );
+        if (r.rows.length > 0) imported++;
+        else skipped++;
+      } catch (rowErr) {
+        errors.push(`Row ${i + 1}: ${rowErr.message}`);
+      }
+    }
+
+    res.json({
+      message: `Import complete. ${imported} student(s) added, ${skipped} skipped (already exist).`,
+      imported,
+      skipped,
+      errors: errors.slice(0, 20),
+    });
+  } catch (err) {
+    console.error("Import error:", err);
+    res.status(500).json({ message: "Import failed: " + err.message });
+  }
+});
+
+// ─── ADMIN: PROFILE UPDATE ────────────────────────────────────────────────────
+
+app.put("/api/admin/profile", requireAdmin, async (req, res) => {
+  const name = req.body?.name;
+  if (!name || !String(name).trim())
+    return res.status(400).json({ message: "Name is required" });
+  try {
+    const result = await pool.query(
+      `UPDATE admins SET name = $1 WHERE id = $2 RETURNING id, admin_email, name, role`,
+      [String(name).trim(), req.authUser.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ message: "Admin not found" });
+    res.json({ message: "Profile updated", admin: result.rows[0] });
+  } catch (err) {
+    console.error("Profile update error:", err);
+    res.status(500).json({ message: "Failed to update profile" });
   }
 });
 
