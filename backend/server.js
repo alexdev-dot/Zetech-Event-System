@@ -23,6 +23,7 @@ const JWT_EXPIRES_IN = "24h";
 
 const cache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
 
+
 // ─── SMS HELPER (Africa's Talking) ────────────────────────────────────────────
 
 let smsClient = null;
@@ -54,6 +55,7 @@ async function sendSMS(to, message) {
     return { success: false, reason: e.message };
   }
 }
+
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -731,6 +733,7 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
   try {
     const existingRes = await pool.query(
       `SELECT id FROM student_registrations WHERE admission_number = $1 OR email = $2 LIMIT 1`,
+
       [admissionNumber.trim(), email.trim().toLowerCase()],
     );
     if (existingRes.rows?.length > 0)
@@ -803,6 +806,7 @@ app.post("/api/auth/login", authLimiter, checkBruteForce, async (req, res) => {
 
     await pool.query(
       `UPDATE student_registrations SET last_login = $1 WHERE id = $2`,
+
       [new Date().toISOString(), student.id],
     );
 
