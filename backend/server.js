@@ -204,7 +204,13 @@ app.use("/uploads", express.static(path.join(__dirname, "public", "uploads")));
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (origin.endsWith(".replit.dev") || origin.endsWith(".replit.app")) return cb(null, true);
+      if (origin === (process.env.CLIENT_URL || "http://localhost:5173")) return cb(null, true);
+      if (origin === "http://localhost:5000" || origin === "http://localhost:3001") return cb(null, true);
+      cb(null, process.env.NODE_ENV !== "production");
+    },
     methods: ["GET", "POST"],
     credentials: true,
   },
