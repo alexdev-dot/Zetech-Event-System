@@ -16,8 +16,9 @@ import {
   Calendar, MapPin, Clock, Users, Plus, LogOut, RefreshCw,
   TrendingUp, CheckCircle, AlertCircle, XCircle, Trash2, Lock, Eye, EyeOff, Menu, X,
   LayoutDashboard, FileText, User as UserIcon, Settings as SettingsIcon, Download, ChevronRight,
-  BarChart3, Mail, Bell, History, Edit, Copy, Upload, ImageIcon
+  BarChart3, Mail, Bell, History, Edit, Copy, Upload, ImageIcon, CalendarDays
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import zetechLogo from "@/assets/zetech-logo.png";
 import { format } from "date-fns";
 
@@ -95,8 +96,22 @@ const ClubLeaderDashboard = () => {
     browserNotifications: true
   });
 
+  // Duration & time-picker state (shared by both create dialogs)
+  const [durationType, setDurationType]   = useState<"single" | "multi">("single");
+  const [timeHour,     setTimeHour]       = useState("8");
+  const [timeMinute,   setTimeMinute]     = useState("00");
+  const [timeAmpm,     setTimeAmpm]       = useState<"AM" | "PM">("AM");
+
+  const TIME_HOURS   = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  const TIME_MINUTES = ["00","05","10","15","20","25","30","35","40","45","50","55"];
+  const buildTime    = () => `${timeHour.padStart(2,"0")}:${timeMinute} ${timeAmpm}`;
+
+  const resetTimeForm = () => {
+    setDurationType("single"); setTimeHour("8"); setTimeMinute("00"); setTimeAmpm("AM");
+  };
+
   const [eventForm, setEventForm] = useState({
-    title: "", description: "", date: "", time: "", location: "", maxParticipants: "", category: "", imageUrl: "",
+    title: "", description: "", date: "", endDate: "", location: "", maxParticipants: "", category: "", imageUrl: "",
   });
 
   // File upload state
@@ -134,44 +149,37 @@ const ClubLeaderDashboard = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      // Validate all required fields
-      if (!eventForm.title.trim()) throw new Error("Event title is required");
+      if (!eventForm.title.trim())       throw new Error("Event title is required");
       if (!eventForm.description.trim()) throw new Error("Event description is required");
-      if (!eventForm.date) throw new Error("Event date is required");
-      if (!eventForm.time) throw new Error("Event time is required");
-      if (!eventForm.location.trim()) throw new Error("Event venue is required");
-      if (!eventForm.imageUrl) throw new Error("Event flyer is required - please upload an image");
-      
+      if (!eventForm.date)               throw new Error("Event date is required");
+      if (!eventForm.location.trim())    throw new Error("Event venue is required");
+      if (!eventForm.imageUrl)           throw new Error("Event flyer is required – please upload an image");
+      if (durationType === "multi" && !eventForm.endDate) throw new Error("End date is required for multi-day events");
+      if (durationType === "multi" && eventForm.endDate < eventForm.date)
+        throw new Error("End date must be on or after the start date");
       if (eventForm.maxParticipants && parseInt(eventForm.maxParticipants) < 1)
         throw new Error("Capacity must be at least 1");
 
-      console.log("Creating event with data:", {
-        title: eventForm.title,
-        category: dashboardData?.club || user?.club || "General",
-        imageUrl: eventForm.imageUrl
-      });
-
-      const response = await api.events.create({
-        title: eventForm.title.trim(),
-        description: eventForm.description.trim(),
-        date: eventForm.date,
-        time: eventForm.time,
-        location: eventForm.location.trim(),
-        category: dashboardData?.club || user?.club || "General",
+      await api.events.create({
+        title:           eventForm.title.trim(),
+        description:     eventForm.description.trim(),
+        date:            eventForm.date,
+        endDate:         durationType === "multi" ? eventForm.endDate : undefined,
+        time:            buildTime(),
+        location:        eventForm.location.trim(),
+        category:        dashboardData?.club || user?.club || "General",
         maxParticipants: eventForm.maxParticipants ? parseInt(eventForm.maxParticipants) : undefined,
-        imageUrl: eventForm.imageUrl,
+        imageUrl:        eventForm.imageUrl,
       });
-
-      console.log("Event created successfully:", response);
 
       toast({ title: "Event submitted!", description: "Your event is awaiting admin approval." });
       setShowCreateEvent(false);
-      setEventForm({ title: "", description: "", date: "", time: "", location: "", maxParticipants: "", category: "", imageUrl: "" });
+      setEventForm({ title: "", description: "", date: "", endDate: "", location: "", maxParticipants: "", category: "", imageUrl: "" });
+      resetTimeForm();
       setUploadedFile(null);
       setPreviewUrl("");
       loadDashboard();
     } catch (error: any) {
-      console.error("Error creating event:", error);
       toast({ title: "Error", description: error.message || "Failed to submit event", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
@@ -604,8 +612,8 @@ const ClubLeaderDashboard = () => {
                     <Dialog open={showCreateEvent} onOpenChange={(open) => {
                       setShowCreateEvent(open);
                       if (!open) {
-                        // Reset form when dialog closes
-                        setEventForm({ title: "", description: "", date: "", time: "", location: "", maxParticipants: "", category: "", imageUrl: "" });
+                        setEventForm({ title: "", description: "", date: "", endDate: "", location: "", maxParticipants: "", category: "", imageUrl: "" });
+                        resetTimeForm();
                         setUploadedFile(null);
                         setPreviewUrl("");
                       }
@@ -624,14 +632,58 @@ const ClubLeaderDashboard = () => {
                             <Label>Description *</Label>
                             <Textarea value={eventForm.description} onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })} placeholder="Describe your event..." rows={3} required className="mt-1" />
                           </div>
-                          <div className="grid grid-cols-2 gap-3">
+
+                          {/* ── Duration toggle ── */}
+                          <div>
+                            <Label className="flex items-center gap-2 mb-2"><CalendarDays className="h-4 w-4" /> Event Duration *</Label>
+                            <div className="flex gap-2">
+                              {(["single","multi"] as const).map(t => (
+                                <button key={t} type="button"
+                                  onClick={() => { setDurationType(t); if (t==="single") setEventForm(f=>({...f,endDate:""})); }}
+                                  className={`flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all
+                                    ${durationType===t ? "border-green-600 bg-green-50 text-green-700" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}>
+                                  {t==="single" ? "📅 Single Day" : "📅📅 Multiple Days"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* ── Date(s) ── */}
+                          <div className={`grid gap-3 ${durationType==="multi" ? "grid-cols-2" : "grid-cols-1"}`}>
                             <div>
-                              <Label>Date *</Label>
+                              <Label>{durationType==="multi" ? "Start Date *" : "Date *"}</Label>
                               <Input type="date" value={eventForm.date} onChange={(e) => setEventForm({ ...eventForm, date: e.target.value })} required className="mt-1" min={new Date().toISOString().split("T")[0]} />
                             </div>
-                            <div>
-                              <Label>Time *</Label>
-                              <Input type="time" value={eventForm.time} onChange={(e) => setEventForm({ ...eventForm, time: e.target.value })} required className="mt-1" />
+                            {durationType==="multi" && (
+                              <div>
+                                <Label>End Date *</Label>
+                                <Input type="date" value={eventForm.endDate} onChange={(e) => setEventForm({ ...eventForm, endDate: e.target.value })} required className="mt-1" min={eventForm.date || new Date().toISOString().split("T")[0]} />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* ── Time picker ── */}
+                          <div>
+                            <Label className="flex items-center gap-2 mb-2"><Clock className="h-4 w-4" /> Start Time *</Label>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Select value={timeHour} onValueChange={setTimeHour}>
+                                <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                                <SelectContent>{TIME_HOURS.map(h=><SelectItem key={h} value={h}>{h.padStart(2,"0")}</SelectItem>)}</SelectContent>
+                              </Select>
+                              <span className="font-bold text-muted-foreground">:</span>
+                              <Select value={timeMinute} onValueChange={setTimeMinute}>
+                                <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                                <SelectContent>{TIME_MINUTES.map(m=><SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                              </Select>
+                              <div className="flex rounded-lg border overflow-hidden">
+                                {(["AM","PM"] as const).map(p=>(
+                                  <button key={p} type="button" onClick={()=>setTimeAmpm(p)}
+                                    className={`px-3 py-2 text-sm font-semibold transition-all ${timeAmpm===p ? "bg-green-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+                                    {p}
+                                  </button>
+                                ))}
+                              </div>
+                              <span className="text-xs text-muted-foreground bg-muted px-2 py-2 rounded font-mono">{buildTime()}</span>
                             </div>
                           </div>
                           <div>
@@ -754,8 +806,8 @@ const ClubLeaderDashboard = () => {
                   <Dialog open={showCreateEvent} onOpenChange={(open) => {
                     setShowCreateEvent(open);
                     if (!open) {
-                      // Reset form when dialog closes
-                      setEventForm({ title: "", description: "", date: "", time: "", location: "", maxParticipants: "", category: "", imageUrl: "" });
+                      setEventForm({ title: "", description: "", date: "", endDate: "", location: "", maxParticipants: "", category: "", imageUrl: "" });
+                      resetTimeForm();
                       setUploadedFile(null);
                       setPreviewUrl("");
                     }
@@ -774,14 +826,58 @@ const ClubLeaderDashboard = () => {
                           <Label>Description *</Label>
                           <Textarea value={eventForm.description} onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })} placeholder="Describe your event..." rows={3} required className="mt-1" />
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
+
+                        {/* ── Duration toggle ── */}
+                        <div>
+                          <Label className="flex items-center gap-2 mb-2"><CalendarDays className="h-4 w-4" /> Event Duration *</Label>
+                          <div className="flex gap-2">
+                            {(["single","multi"] as const).map(t => (
+                              <button key={t} type="button"
+                                onClick={() => { setDurationType(t); if (t==="single") setEventForm(f=>({...f,endDate:""})); }}
+                                className={`flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all
+                                  ${durationType===t ? "border-green-600 bg-green-50 text-green-700" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}>
+                                {t==="single" ? "📅 Single Day" : "📅📅 Multiple Days"}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* ── Date(s) ── */}
+                        <div className={`grid gap-3 ${durationType==="multi" ? "grid-cols-2" : "grid-cols-1"}`}>
                           <div>
-                            <Label>Date *</Label>
+                            <Label>{durationType==="multi" ? "Start Date *" : "Date *"}</Label>
                             <Input type="date" value={eventForm.date} onChange={(e) => setEventForm({ ...eventForm, date: e.target.value })} required className="mt-1" min={new Date().toISOString().split("T")[0]} />
                           </div>
-                          <div>
-                            <Label>Time *</Label>
-                            <Input type="time" value={eventForm.time} onChange={(e) => setEventForm({ ...eventForm, time: e.target.value })} required className="mt-1" />
+                          {durationType==="multi" && (
+                            <div>
+                              <Label>End Date *</Label>
+                              <Input type="date" value={eventForm.endDate} onChange={(e) => setEventForm({ ...eventForm, endDate: e.target.value })} required className="mt-1" min={eventForm.date || new Date().toISOString().split("T")[0]} />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ── Time picker ── */}
+                        <div>
+                          <Label className="flex items-center gap-2 mb-2"><Clock className="h-4 w-4" /> Start Time *</Label>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Select value={timeHour} onValueChange={setTimeHour}>
+                              <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                              <SelectContent>{TIME_HOURS.map(h=><SelectItem key={h} value={h}>{h.padStart(2,"0")}</SelectItem>)}</SelectContent>
+                            </Select>
+                            <span className="font-bold text-muted-foreground">:</span>
+                            <Select value={timeMinute} onValueChange={setTimeMinute}>
+                              <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                              <SelectContent>{TIME_MINUTES.map(m=><SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                            </Select>
+                            <div className="flex rounded-lg border overflow-hidden">
+                              {(["AM","PM"] as const).map(p=>(
+                                <button key={p} type="button" onClick={()=>setTimeAmpm(p)}
+                                  className={`px-3 py-2 text-sm font-semibold transition-all ${timeAmpm===p ? "bg-green-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+                                  {p}
+                                </button>
+                              ))}
+                            </div>
+                            <span className="text-xs text-muted-foreground bg-muted px-2 py-2 rounded font-mono">{buildTime()}</span>
                           </div>
                         </div>
                         <div>
