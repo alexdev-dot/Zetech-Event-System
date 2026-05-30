@@ -1,27 +1,26 @@
+// This file contains type definitions and fallback data for the frontend.
+// Real dynamic data comes from the backend API and database.
+// Static data here is used only as fallback when API is unavailable.
+
 export interface Event {
   id: string;
   title: string;
   description: string;
   date: string;
   time: string;
-  venue: string;
-  campus: string;
-  posterUrl: string;
-  status: "approved" | "pending";
-  registrations: number;
-  capacity: number;
-  organizer: string;
-  category: string;
-  featured?: boolean;
+  venue: string; // Maps to 'location' in database
+  campus: string; // Derived from location or separate field
+  posterUrl: string; // Maps to 'image_url' in database
+  status: "approved" | "pending" | "upcoming" | "ongoing" | "completed" | "cancelled" | "rejected";
+  registrations: number; // Derived from event_registrations table
+  capacity: number; // Maps to 'max_participants' in database
+  organizer: string; // Derived from admins table via created_by
+  category: string; // Maps to category field in events table
+  featured?: boolean; // UI-only flag
+  end_date?: string; // Optional end date from database
+  created_at?: string; // Timestamp from database
+  updated_at?: string; // Timestamp from database
 }
-
-export const campuses = [
-  "Ruiru",
-  "Mang'u", 
-  "CBD (Nairobi campus)"
-];
-
-
 
 export interface Category {
   name: string;
@@ -74,10 +73,6 @@ export const categories: Category[] = [
     subCategories: [
       "Zetech university Student Association (ZUSA)"
     ]
-  },
-  {
-    name: "Creative & Media",
-    subCategories: []
   }
 ];
 

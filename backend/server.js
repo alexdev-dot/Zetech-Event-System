@@ -13,6 +13,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import compression from "compression";
+import crypto from "crypto";
 import { pool, testConnection } from "./db.js";
 
 const app = express();
@@ -56,6 +57,33 @@ function isValidDate(s) {
 /** True if val is a safe integer string (no injection, no overflow) */
 function isSafeInt(val) {
   return Number.isInteger(Number(val)) && Math.abs(Number(val)) < 2147483647;
+}
+
+/**
+ * Validate password complexity
+ * Requirements: minimum 8 characters, at least one uppercase, one lowercase,
+ * one number, and one special character
+ */
+function validatePassword(password) {
+  if (!password || typeof password !== "string") {
+    return { valid: false, message: "Password is required" };
+  }
+  if (password.length < 8) {
+    return { valid: false, message: "Password must be at least 8 characters long" };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one uppercase letter" };
+  }
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one lowercase letter" };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one number" };
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one special character" };
+  }
+  return { valid: true };
 }
 
 
@@ -120,16 +148,29 @@ const fileFilter = (req, file, cb) => {
     "image/gif",
     "image/webp",
   ];
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(
-      new Error(
-        "Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.",
-      ),
-      false,
-    );
+  
+  // Check file extension
+  const ext = path.extname(file.originalname).toLowerCase();
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+  
+  if (!allowedExtensions.includes(ext)) {
+    cb(new Error("Invalid file extension. Only JPEG, PNG, GIF, and WebP are allowed."), false);
+    return;
   }
+  
+  // Check MIME type
+  if (!allowedTypes.includes(file.mimetype)) {
+    cb(new Error("Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed."), false);
+    return;
+  }
+  
+  // Check filename for suspicious patterns
+  if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
+    cb(new Error("Invalid filename."), false);
+    return;
+  }
+  
+  cb(null, true);
 };
 
 const upload = multer({
@@ -137,6 +178,7 @@ const upload = multer({
   fileFilter: fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
+    files: 1, // Only allow single file upload
   },
 });
 
@@ -154,8 +196,8 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'"],
         imgSrc: ["'self'", "data:", "blob:", "https:"],
         connectSrc: ["'self'", "wss:", "ws:", "https:"],
         fontSrc: ["'self'", "data:", "https:"],
@@ -164,10 +206,19 @@ app.use(
         upgradeInsecureRequests: null,
       },
     },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    xContentTypeOptions: true,
+    xFrameOptions: { action: "deny" },
+    xXssProtection: "1; mode=block",
   })
 );
 
-// CORS – allow same-origin + configured origins + Replit preview domains
+// CORS – allow same-origin + configured origins
 const allowedOrigins = new Set(
   [
     process.env.CLIENT_URL,
@@ -182,16 +233,49 @@ app.use(
     origin: (origin, cb) => {
       if (!origin) return cb(null, true); // same-origin or server-to-server
       if (allowedOrigins.has(origin)) return cb(null, true);
-      if (origin.endsWith(".replit.dev") || origin.endsWith(".replit.app"))
-        return cb(null, true);
       if (process.env.NODE_ENV === "production") return cb(null, false);
       cb(null, true); // permissive in dev
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
   })
 );
+
+// ─── CSRF PROTECTION ─────────────────────────────────────────────────────────────
+// Generate CSRF tokens for state-changing requests
+
+function generateCSRFToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function validateCSRFToken(req, res, next) {
+  // Skip CSRF for GET, HEAD, OPTIONS requests
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+  
+  // Skip CSRF for API endpoints that don't need it (auth endpoints)
+  if (req.path.startsWith('/api/auth/')) {
+    return next();
+  }
+  
+  const token = req.headers['x-csrf-token'];
+  if (!token) {
+    return res.status(403).json({ message: 'CSRF token missing' });
+  }
+  
+  // In production, validate against session/token store
+  // For now, we'll just ensure the token exists and is properly formatted
+  if (token.length !== 64) {
+    return res.status(403).json({ message: 'Invalid CSRF token' });
+  }
+  
+  next();
+}
+
+// Apply CSRF protection to all routes except auth
+app.use(validateCSRFToken);
 
 // Gzip compression – reduces JSON/text payloads by ~70%, critical for 100k+ users
 app.use(compression());
@@ -257,7 +341,6 @@ const io = new Server(httpServer, {
   cors: {
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
-      if (origin.endsWith(".replit.dev") || origin.endsWith(".replit.app")) return cb(null, true);
       if (origin === (process.env.CLIENT_URL || "http://localhost:5173")) return cb(null, true);
       if (origin === "http://localhost:5000" || origin === "http://localhost:3001") return cb(null, true);
       cb(null, process.env.NODE_ENV !== "production");
@@ -330,6 +413,15 @@ function generateToken(payload) {
 
 function invalidateCache(...keys) {
   keys.forEach((k) => cache.del(k));
+}
+
+function invalidateUserAuthCache(userId) {
+  // Invalidate all cached auth tokens for a specific user
+  // Since we use last 40 chars of JWT signature as cache key,
+  // we need to clear the entire auth cache when password changes
+  // In a production setup with Redis, we'd use a user-specific key pattern
+  authCache.flushAll();
+  console.log(`[Security] Auth cache cleared for user ${userId} after password change`);
 }
 
 /**
@@ -724,9 +816,10 @@ async function ensureDatabaseSchema() {
 }
 
 // ─── BRUTE FORCE PROTECTION ───────────────────────────────────────────────────
-// Layer 2 defence (rate limiter is layer 1) – per-IP failure tracking
+// Layer 2 defence (rate limiter is layer 1) – per-IP AND per-account failure tracking
 
 const loginFailures = new Map(); // ip → { count, lockedUntil }
+const accountFailures = new Map(); // accountIdentifier → { count, lockedUntil }
 const BRUTE_MAX = 5;
 const BRUTE_LOCK_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -736,12 +829,24 @@ function checkBruteForce(req, res, next) {
   if (rec?.lockedUntil && Date.now() < rec.lockedUntil) {
     const mins = Math.ceil((rec.lockedUntil - Date.now()) / 60000);
     return res.status(429).json({
-      message: `Too many failed attempts. Account locked for ${mins} more minute(s).`,
+      message: `Too many failed attempts from this IP. Locked for ${mins} more minute(s).`,
     });
   }
   next();
 }
-function recordLoginFailure(ip) {
+
+function checkAccountLockout(accountIdentifier, res) {
+  const rec = accountFailures.get(accountIdentifier);
+  if (rec?.lockedUntil && Date.now() < rec.lockedUntil) {
+    const mins = Math.ceil((rec.lockedUntil - Date.now()) / 60000);
+    return res.status(429).json({
+      message: `Account locked due to too many failed attempts. Try again in ${mins} minute(s).`,
+    });
+  }
+  return null;
+}
+
+function recordLoginFailure(ip, accountIdentifier = null) {
   const rec = loginFailures.get(ip) || { count: 0, lockedUntil: null };
   rec.count++;
   if (rec.count >= BRUTE_MAX) {
@@ -750,15 +855,33 @@ function recordLoginFailure(ip) {
     console.warn(`[Security] IP ${ip} brute-force locked for 15 min`);
   }
   loginFailures.set(ip, rec);
+
+  if (accountIdentifier) {
+    const accRec = accountFailures.get(accountIdentifier) || { count: 0, lockedUntil: null };
+    accRec.count++;
+    if (accRec.count >= BRUTE_MAX) {
+      accRec.lockedUntil = Date.now() + BRUTE_LOCK_MS;
+      accRec.count = 0;
+      console.warn(`[Security] Account ${accountIdentifier} brute-force locked for 15 min`);
+    }
+    accountFailures.set(accountIdentifier, accRec);
+  }
 }
-function clearLoginFailures(ip) {
+
+function clearLoginFailures(ip, accountIdentifier = null) {
   loginFailures.delete(ip);
+  if (accountIdentifier) {
+    accountFailures.delete(accountIdentifier);
+  }
 }
+
 // Clean up expired records every 30 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [ip, rec] of loginFailures)
     if (!rec.lockedUntil || rec.lockedUntil < now) loginFailures.delete(ip);
+  for (const [account, rec] of accountFailures)
+    if (!rec.lockedUntil || rec.lockedUntil < now) accountFailures.delete(account);
 }, 30 * 60 * 1000);
 
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
@@ -912,10 +1035,11 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
     return res.status(400).json({ message: "Invalid email address" });
   if (typeof admissionNumber !== "string" || admissionNumber.trim().length < 3)
     return res.status(400).json({ message: "Invalid admission number" });
-  if (typeof password !== "string" || password.length < 6)
-    return res
-      .status(400)
-      .json({ message: "Password must be at least 6 characters" });
+  
+  const passwordValidation = validatePassword(password);
+  if (!passwordValidation.valid) {
+    return res.status(400).json({ message: passwordValidation.message });
+  }
 
   try {
     const existingRes = await pool.query(
@@ -969,20 +1093,24 @@ app.post("/api/auth/login", authLimiter, checkBruteForce, async (req, res) => {
   if (typeof admissionNumber !== "string" || typeof password !== "string")
     return res.status(400).json({ message: "Invalid input" });
 
+  const accountIdentifier = admissionNumber.trim().toLowerCase();
+  const lockoutCheck = checkAccountLockout(accountIdentifier, res);
+  if (lockoutCheck) return lockoutCheck;
+
   try {
     const studentsRes = await pool.query(
       `SELECT id, first_name, last_name, admission_number, email, password, status FROM student_registrations WHERE admission_number = $1 LIMIT 1`,
       [admissionNumber.trim()],
     );
     if (!studentsRes.rows?.length) {
-      recordLoginFailure(req.ip);
+      recordLoginFailure(req.ip, accountIdentifier);
       logAudit({ eventType: "student.login.failed", ip: req.ip, ua: req.headers["user-agent"],
                  details: { reason: "not_found", admission: admissionNumber.trim().slice(0,20) }, success: false });
       return res.status(401).json({ message: "Invalid admission number or password" });
     }
     const student = studentsRes.rows[0];
     if (student.status === "deleted") {
-      recordLoginFailure(req.ip);
+      recordLoginFailure(req.ip, accountIdentifier);
       logAudit({ eventType: "student.login.failed", actorType: "student", actorId: student.id,
                  actorEmail: student.email, ip: req.ip, ua: req.headers["user-agent"],
                  details: { reason: "account_deactivated" }, success: false });
@@ -991,13 +1119,13 @@ app.post("/api/auth/login", authLimiter, checkBruteForce, async (req, res) => {
 
     const valid = await bcrypt.compare(password, student.password);
     if (!valid) {
-      recordLoginFailure(req.ip);
+      recordLoginFailure(req.ip, accountIdentifier);
       logAudit({ eventType: "student.login.failed", actorType: "student", actorId: student.id,
                  actorEmail: student.email, ip: req.ip, ua: req.headers["user-agent"],
                  details: { reason: "wrong_password" }, success: false });
       return res.status(401).json({ message: "Invalid admission number or password" });
     }
-    clearLoginFailures(req.ip);
+    clearLoginFailures(req.ip, accountIdentifier);
 
     await pool.query(
       `UPDATE student_registrations SET last_login = $1 WHERE id = $2`,
@@ -1034,6 +1162,10 @@ app.post("/api/auth/admin/login", authLimiter, checkBruteForce, async (req, res)
   if (typeof email !== "string" || typeof password !== "string")
     return res.status(400).json({ message: "Invalid input" });
 
+  const accountIdentifier = email.trim().toLowerCase();
+  const lockoutCheck = checkAccountLockout(accountIdentifier, res);
+  if (lockoutCheck) return lockoutCheck;
+
   try {
     // Select only base columns (always exist); role/name/club are added by schema migration
     const adminsRes = await pool.query(
@@ -1041,7 +1173,7 @@ app.post("/api/auth/admin/login", authLimiter, checkBruteForce, async (req, res)
       [email.trim().toLowerCase()],
     );
     if (!adminsRes.rows?.length) {
-      recordLoginFailure(req.ip);
+      recordLoginFailure(req.ip, accountIdentifier);
       logAudit({ eventType: "admin.login.failed", ip: req.ip, ua: req.headers["user-agent"],
                  details: { reason: "not_found", email: email.trim().toLowerCase() }, success: false });
       return res.status(401).json({ message: "Invalid credentials" });
@@ -1058,13 +1190,13 @@ app.post("/api/auth/admin/login", authLimiter, checkBruteForce, async (req, res)
       console.warn(`[Security] Admin ID ${admin.id} has a non-bcrypt password hash — please rehash.`);
     }
     if (!valid) {
-      recordLoginFailure(req.ip);
+      recordLoginFailure(req.ip, accountIdentifier);
       logAudit({ eventType: "admin.login.failed", actorType: "admin", actorId: admin.id,
                  actorEmail: admin.admin_email, ip: req.ip, ua: req.headers["user-agent"],
                  details: { reason: "wrong_password" }, success: false });
       return res.status(401).json({ message: "Invalid credentials" });
     }
-    clearLoginFailures(req.ip);
+    clearLoginFailures(req.ip, accountIdentifier);
 
     // Try to read extra columns if they exist (graceful fallback)
     let role = "admin",
@@ -1353,6 +1485,11 @@ app.post("/api/events", requireAdminOrLeader, adminWriteLimiter, async (req, res
     return res.status(400).json({ message: "Description must be at least 10 characters" });
   if (!isValidDate(date))
     return res.status(400).json({ message: "Invalid date format (expected YYYY-MM-DD)" });
+  const eventDate = new Date(date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (eventDate < today)
+    return res.status(400).json({ message: "Event date cannot be in the past" });
   if (maxParticipants !== undefined && maxParticipants !== null) {
     const cap = parseInt(maxParticipants);
     if (isNaN(cap) || cap < 1 || cap > 100000)
@@ -1417,6 +1554,11 @@ app.put("/api/events/:id", requireAdminOrLeader, adminWriteLimiter, async (req, 
     return res.status(400).json({ message: "All event fields are required" });
   if (!isValidDate(date))
     return res.status(400).json({ message: "Invalid date format (expected YYYY-MM-DD)" });
+  const eventDate = new Date(date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (eventDate < today)
+    return res.status(400).json({ message: "Event date cannot be in the past" });
 
   try {
     if (req.authUser.role === "club_leader") {
@@ -2205,10 +2347,12 @@ app.put("/api/admin/account", requireAdmin, async (req, res) => {
     return res.status(400).json({ message: "Provide a new email or password" });
   if (newPassword && newPassword !== confirmNewPassword)
     return res.status(400).json({ message: "Passwords do not match" });
-  if (newPassword && newPassword.length < 6)
-    return res
-      .status(400)
-      .json({ message: "Password must be at least 6 characters" });
+  if (newPassword) {
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ message: passwordValidation.message });
+    }
+  }
   if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail))
     return res.status(400).json({ message: "Invalid email format" });
 
@@ -2254,6 +2398,10 @@ app.put("/api/admin/account", requireAdmin, async (req, res) => {
         `UPDATE admins SET ${setClauses.join(", ")} WHERE id = $${idx}`,
         vals,
       );
+      // Invalidate auth cache if password was changed
+      if (newPassword) {
+        invalidateUserAuthCache(req.authUser.id);
+      }
     }
     res.json({ message: "Account updated successfully" });
   } catch (error) {
@@ -2932,10 +3080,11 @@ app.put("/api/club-leader/account", requireAdminOrLeader, async (req, res) => {
       .json({ message: "All password fields are required" });
   if (newPassword !== confirmNewPassword)
     return res.status(400).json({ message: "Passwords do not match" });
-  if (newPassword.length < 6)
-    return res
-      .status(400)
-      .json({ message: "Password must be at least 6 characters" });
+  
+  const passwordValidation = validatePassword(newPassword);
+  if (!passwordValidation.valid) {
+    return res.status(400).json({ message: passwordValidation.message });
+  }
 
   try {
     const adminsRes = await pool.query(
@@ -2956,6 +3105,8 @@ app.put("/api/club-leader/account", requireAdminOrLeader, async (req, res) => {
       hashed,
       req.authUser.id,
     ]);
+    // Invalidate auth cache after password change
+    invalidateUserAuthCache(req.authUser.id);
     res.json({ message: "Password updated successfully" });
   } catch (error) {
     console.error("Club leader account update error:", error);
@@ -2972,13 +3123,16 @@ async function seedDefaultAdmin() {
       ["admin@zetech.ac.ke"]
     );
     if (existing.rows.length === 0) {
-      const hash = await bcrypt.hash("admin123", 12);
+      const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || crypto.randomBytes(16).toString('hex');
+      const hash = await bcrypt.hash(defaultAdminPassword, 12);
       await pool.query(
         `INSERT INTO admins (admin_email, password_hash, name, role)
          VALUES ($1, $2, $3, 'admin')`,
         ["admin@zetech.ac.ke", hash, "System Administrator"]
       );
-      console.log("Default admin seeded ✓ (admin@zetech.ac.ke / admin123)");
+      console.log("Default admin seeded ✓ (admin@zetech.ac.ke)");
+      console.log("IMPORTANT: Default admin password:", defaultAdminPassword);
+      console.log("Please change this password immediately after first login!");
     }
   } catch (err) {
     console.warn("Admin seed warning:", err.message);

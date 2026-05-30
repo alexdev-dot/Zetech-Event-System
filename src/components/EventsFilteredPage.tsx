@@ -140,19 +140,36 @@ const EventsFilteredPage = ({
               </Button>
             )}
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {["All", ...categories.map(c => c.name)].map(cat => (
-              <button
-                key={cat}
-                onClick={() => setCategory(cat)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all
-                  ${activeCategory === cat
-                    ? "bg-primary text-primary-foreground shadow-md"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+          {/* Category chips - mobile dropdown, desktop horizontal */}
+          <div>
+            {/* Mobile dropdown */}
+            <div className="sm:hidden mb-4">
+              <select
+                value={activeCategory}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 bg-white text-sm font-medium focus:border-primary focus:outline-none min-h-[48px]"
               >
-                {cat}
-              </button>
-            ))}
+                {["All", ...categories.map(c => c.name)].map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Desktop horizontal chips */}
+            <div className="hidden sm:flex gap-2 flex-wrap overflow-x-auto scrollbar-hide">
+              {["All", ...categories.map(c => c.name)].map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setCategory(cat)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap
+                    ${activeCategory === cat
+                      ? "bg-primary text-primary-foreground shadow-md"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

@@ -194,7 +194,7 @@ const EventCard = ({ event }: { event: Event }) => {
     >
       {/* Image container with enhanced hover effect */}
 
-      <div className="relative overflow-hidden h-48">
+      <div className="relative overflow-hidden h-48 sm:h-56 lg:h-64">
         {event.posterUrl && !imageError ? (
           <div className="relative w-full h-full">
             <img
@@ -249,8 +249,8 @@ const EventCard = ({ event }: { event: Event }) => {
 
       {/* Enhanced content section */}
 
-      <div className="p-6">
-        <h3 className="font-heading font-bold text-gray-900 group-hover:text-blue-600 transition-colors duration-300 line-clamp-2 mb-3 text-lg leading-tight">
+      <div className="p-4 sm:p-6">
+        <h3 className="font-heading font-bold text-gray-900 group-hover:text-blue-600 transition-colors duration-300 line-clamp-2 mb-3 text-base sm:text-lg leading-tight">
           {event.title}
         </h3>
 

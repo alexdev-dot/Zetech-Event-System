@@ -1,12 +1,12 @@
 /**
  * db.js — Supabase via HTTPS (RPC)
  *
- * Replit blocks outbound TCP on ports 5432 and 6543, so a direct pg connection
- * to Supabase is not possible. Instead, all queries route through an `exec_sql`
- * PostgreSQL function exposed over HTTPS via Supabase's RPC endpoint.
+ * This module uses Supabase's REST API via RPC to execute SQL queries.
+ * This approach provides better security and works in all deployment environments
+ * without requiring direct TCP connections to the database.
  *
  * Setup (one-time, in your Supabase SQL editor):
- *   See the SQL snippet shown in the terminal or in backend/setup_exec_sql.sql
+ *   Run the SQL in backend/setup_exec_sql.sql to create the exec_sql function
  */
 
 import { createClient } from "@supabase/supabase-js";

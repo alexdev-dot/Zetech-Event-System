@@ -138,25 +138,25 @@ const Auth = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex">
       {/* Left panel — form */}
-      <div className="flex-1 flex flex-col justify-center items-center px-6 py-12">
+      <div className="flex-1 flex flex-col justify-center items-center px-4 sm:px-6 py-8 sm:py-12">
         <div className="w-full max-w-md">
           <Button
             variant="ghost"
             onClick={() => navigate("/")}
-            className="mb-6 text-gray-600"
+            className="mb-4 sm:mb-6 text-gray-600 min-h-[44px]"
           >
             <ArrowLeft className="w-4 h-4 mr-2" /> Go home
           </Button>
 
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 sm:p-8">
             {/* Logo */}
-            <div className="text-center mb-8">
+            <div className="text-center mb-6 sm:mb-8">
               <img
                 src={zetechLogo}
                 alt="Zetech University"
-                className="w-16 h-16 mx-auto mb-3 object-contain"
+                className="w-14 h-14 sm:w-16 sm:h-16 mx-auto mb-3 object-contain"
               />
-              <h1 className="text-2xl font-bold text-gray-800">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-800">
                 Zetech Events Hub
               </h1>
               <p className="text-sm text-gray-500 mt-1">
@@ -167,7 +167,7 @@ const Auth = () => {
             </div>
 
             {/* Toggle login / register */}
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-6">
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-4 sm:mb-6">
               <span className="text-sm text-gray-600">
                 {isNewStudent ? "Already have an account?" : "New student?"}
               </span>
@@ -178,7 +178,7 @@ const Auth = () => {
                   setIdentifier("");
                   setPassword("");
                 }}
-                className="text-blue-600 p-0 h-auto font-medium text-sm"
+                className="text-blue-600 p-0 h-auto font-medium text-sm min-h-[44px]"
               >
                 {isNewStudent ? "Sign In" : "Create Account"}
               </Button>
@@ -186,19 +186,35 @@ const Auth = () => {
 
             {/* Role selector — login only */}
             {!isNewStudent && (
-              <div className="mb-6">
+              <div className="mb-4 sm:mb-6">
                 <Label className="text-sm font-medium text-gray-700 mb-3 block">
                   Sign in as
                 </Label>
+                {/* Mobile dropdown */}
+                <div className="sm:hidden mb-4">
+                  <select
+                    value={role}
+                    onChange={(e) => {
+                      setRole(e.target.value as RoleType);
+                      setIdentifier("");
+                    }}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 bg-white text-sm font-medium focus:border-primary focus:outline-none min-h-[48px]"
+                  >
+                    <option value="student">Student</option>
+                    <option value="admin">Administrator</option>
+                    <option value="club_leader">Club Leader</option>
+                  </select>
+                </div>
+                {/* Desktop radio group */}
                 <RadioGroup
                   value={role}
                   onValueChange={(v) => {
                     setRole(v as RoleType);
                     setIdentifier("");
                   }}
-                  className="space-y-2"
+                  className="space-y-2 hidden sm:block"
                 >
-                  <div className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors min-h-[56px]">
                     <RadioGroupItem value="student" id="role-student" />
                     <Label
                       htmlFor="role-student"
@@ -214,7 +230,7 @@ const Auth = () => {
                     </Label>
                   </div>
 
-                  <div className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors min-h-[56px]">
                     <RadioGroupItem value="admin" id="role-admin" />
                     <Label
                       htmlFor="role-admin"
@@ -230,7 +246,7 @@ const Auth = () => {
                     </Label>
                   </div>
 
-                  <div className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors min-h-[56px]">
                     <RadioGroupItem value="club_leader" id="role-club-leader" />
                     <Label
                       htmlFor="role-club-leader"
@@ -251,7 +267,7 @@ const Auth = () => {
 
             {/* Login Form */}
             {!isNewStudent ? (
-              <form onSubmit={handleLogin} className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5">
                 <div>
                   <Label
                     htmlFor="identifier"
@@ -267,6 +283,7 @@ const Auth = () => {
                     placeholder={identifierPlaceholder[role]}
                     required
                     autoComplete={role === "student" ? "username" : "email"}
+                    className="h-12 sm:h-10"
                   />
                 </div>
 
@@ -286,26 +303,26 @@ const Auth = () => {
                       placeholder="Enter your password"
                       required
                       autoComplete="current-password"
-                      className="pr-10"
+                      className="pr-12 h-12 sm:h-10"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
                       aria-label={
                         showPassword ? "Hide password" : "Show password"
                       }
                     >
                       {showPassword ? (
-                        <EyeOff className="w-4 h-4" />
+                        <EyeOff className="w-5 h-5" />
                       ) : (
-                        <Eye className="w-4 h-4" />
+                        <Eye className="w-5 h-5" />
                       )}
                     </button>
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={loadingForm}>
+                <Button type="submit" className="w-full h-12 sm:h-10" disabled={loadingForm}>
                   {loadingForm ? (
                     <span className="flex items-center gap-2">
                       <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -320,7 +337,7 @@ const Auth = () => {
               </form>
             ) : (
               /* Registration Form */
-              <form onSubmit={handleCreateStudentAccount} className="space-y-4">
+              <form onSubmit={handleCreateStudentAccount} className="space-y-4 sm:space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label
@@ -335,6 +352,7 @@ const Auth = () => {
                       onChange={(e) => setFirstName(e.target.value)}
                       placeholder="John"
                       required
+                      className="h-12 sm:h-10"
                     />
                   </div>
                   <div>
@@ -350,6 +368,7 @@ const Auth = () => {
                       onChange={(e) => setLastName(e.target.value)}
                       placeholder="Doe"
                       required
+                      className="h-12 sm:h-10"
                     />
                   </div>
                 </div>
@@ -367,6 +386,7 @@ const Auth = () => {
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="e.g. BIT-01-0001/2024"
                     required
+                    className="h-12 sm:h-10"
                   />
                 </div>
 
@@ -386,7 +406,7 @@ const Auth = () => {
                       onChange={(e) => setStudentEmail(e.target.value)}
                       placeholder="you@example.com"
                       required
-                      className="pl-9"
+                      className="pl-10 h-12 sm:h-10"
                     />
                   </div>
                 </div>
@@ -408,17 +428,17 @@ const Auth = () => {
                       placeholder="Min. 6 characters"
                       required
                       minLength={6}
-                      className="pl-9 pr-10"
+                      className="pl-10 pr-12 h-12 sm:h-10"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
                     >
                       {showPassword ? (
-                        <EyeOff className="w-4 h-4" />
+                        <EyeOff className="w-5 h-5" />
                       ) : (
-                        <Eye className="w-4 h-4" />
+                        <Eye className="w-5 h-5" />
                       )}
                     </button>
                   </div>
@@ -441,12 +461,12 @@ const Auth = () => {
                       placeholder="Repeat your password"
                       required
                       minLength={6}
-                      className="pl-9"
+                      className="pl-10 h-12 sm:h-10"
                     />
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={loadingForm}>
+                <Button type="submit" className="w-full h-12 sm:h-10" disabled={loadingForm}>
                   {loadingForm ? (
                     <span className="flex items-center gap-2">
                       <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -461,21 +481,21 @@ const Auth = () => {
               </form>
             )}
 
-            <div className="mt-6 text-center text-sm text-gray-400 space-x-4">
+            <div className="mt-6 text-center text-sm text-gray-400 space-x-2 sm:space-x-4">
               <a
                 href="https://elearning.zetech.ac.ke/login/forgot_password.php"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-gray-600"
+                className="hover:text-gray-600 inline-block min-h-[44px] py-2"
               >
                 Forgot Password?
               </a>
-              <span>·</span>
+              <span className="hidden sm:inline">·</span>
               <a
                 href="https://zetech.ac.ke"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-gray-600"
+                className="hover:text-gray-600 inline-block min-h-[44px] py-2"
               >
                 Zetech Website
               </a>

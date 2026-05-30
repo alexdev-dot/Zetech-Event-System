@@ -123,7 +123,7 @@ const Index = () => {
               </Link>
             </Button>
           </div>
-          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {forYouEvents.map(event => (
               <EventCard key={event.id} event={event} />
             ))}
@@ -150,7 +150,7 @@ const Index = () => {
         </div>
 
         {upcomingEvents.length > 0 ? (
-          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {upcomingEvents.map(event => (
               <EventCard key={event.id} event={event} />
             ))}

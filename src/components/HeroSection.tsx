@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 
 const HeroSection = () => {
   return (
-    <section className="relative overflow-hidden h-[60vh] min-h-[400px]">
+    <section className="relative h-[60vh] min-h-[500px] md:min-h-[400px]">
       {/* Background image with enhanced visibility */}
       <div className="absolute inset-0">
         <img src="https://www.zetech.ac.ke/images/sliders-inner/slide1.png" alt="Zetech University campus event" className="w-full h-full object-cover object-center scale-105" 
@@ -28,13 +28,13 @@ const HeroSection = () => {
           <p className="text-base text-white/90 mb-6 max-w-lg">
             Stay connected with everything happening at Zetech University. Browse events, register instantly, and never miss an opportunity.
           </p>
-          <div className="flex flex-wrap gap-3">
-            <Button asChild size="lg" className="bg-primary text-primary-foreground hover:bg-white hover:text-primary font-semibold transition-all duration-300">
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            <Button asChild className="bg-primary text-primary-foreground hover:bg-white hover:text-primary font-semibold transition-all duration-300 w-full sm:w-auto">
               <Link to="/events">
                 Browse Events <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="border-primary text-primary hover:bg-white hover:text-primary transition-all duration-300">
+            <Button asChild variant="outline" className="border-white text-white hover:bg-white hover:text-primary transition-all duration-300 bg-white/10 backdrop-blur-sm w-full sm:w-auto">
               <Link to="/calendar">
                 View Calendar
               </Link>

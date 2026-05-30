@@ -304,7 +304,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <div key={link.path}>
                   {link.hasDropdown ? (
                     <div>
-                      <div className="block w-full px-4 py-3 rounded-md text-sm font-medium transition-colors text-foreground hover:bg-muted">
+                      <div className="block w-full px-4 py-4 rounded-md text-sm font-medium transition-colors text-foreground hover:bg-muted min-h-[48px]">
                         {link.label}
                       </div>
                       <div className="ml-4 space-y-1">
@@ -313,7 +313,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                             key={item.path}
                             to={item.path}
                             onClick={() => setMobileOpen(false)}
-                            className="block w-full px-4 py-2 rounded-md text-sm font-medium transition-colors text-foreground hover:bg-muted"
+                            className="block w-full px-4 py-3 rounded-md text-sm font-medium transition-colors text-foreground hover:bg-muted min-h-[48px]"
                           >
                             {item.label}
                           </Link>
@@ -324,7 +324,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                     <Link
                       to={link.path}
                       onClick={() => setMobileOpen(false)}
-                      className={`block w-full px-4 py-3 rounded-md text-sm font-medium transition-colors ${
+                      className={`block w-full px-4 py-4 rounded-md text-sm font-medium transition-colors min-h-[48px] ${
                         location.pathname === link.path
                           ? "bg-primary text-primary-foreground"
                           : "text-foreground hover:bg-muted"
@@ -340,7 +340,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-full justify-start gap-2 relative"
+                    className="w-full justify-start gap-2 relative min-h-[48px]"
                     onClick={() => { setNotifOpen(true); setMobileOpen(false); }}
                   >
                     <Bell className="w-4 h-4" />
@@ -354,7 +354,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </div>
               ) : (
                 <div className="mt-4 pt-4 border-t">
-                  <Button variant="ghost" size="sm" asChild className="w-full justify-center">
+                  <Button variant="ghost" size="sm" asChild className="w-full justify-center min-h-[48px]">
                     <Link to="/auth" onClick={() => setMobileOpen(false)}>
                       <LogIn className="w-4 h-4 mr-1" /> Sign In
                     </Link>

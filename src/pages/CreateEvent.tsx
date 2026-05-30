@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar, MapPin, Clock, User, ArrowLeft, Send, Upload, X, Image as ImageIcon, CalendarDays } from "lucide-react";
-import { campuses } from "@/data/events";
 import { useCategories } from "@/hooks/useCategories";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
@@ -295,12 +294,8 @@ const CreateEvent = () => {
                   </div>
                   <div>
                     <Label htmlFor="campus">Campus *</Label>
-                    <Select value={formData.campus} onValueChange={v => handleChange("campus", v)}>
-                      <SelectTrigger><SelectValue placeholder="Select campus" /></SelectTrigger>
-                      <SelectContent>
-                        {campuses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <Input id="campus" value={formData.campus} onChange={e => handleChange("campus", e.target.value)}
+                      placeholder="e.g. Ruiru Main Campus" required />
                   </div>
                 </div>
 
