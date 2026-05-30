@@ -391,6 +391,45 @@ async function fetchEventCreatorClub(createdBy) {
   return res.rows?.[0]?.club ?? null;
 }
 
+// ─── SECURITY AUDIT LOG HELPER ────────────────────────────────────────────────
+/**
+ * Fire-and-forget audit log writer. Never throws — a failed log write must
+ * never break the actual request being served.
+ *
+ * @param {object} opts
+ *   eventType  — machine-readable event name  e.g. 'student.login.success'
+ *   actorType  — 'student' | 'admin' | 'club_leader' | null
+ *   actorId    — DB id of the actor
+ *   actorEmail — email/admission for the actor
+ *   ip         — req.ip
+ *   ua         — req.headers['user-agent']
+ *   targetType — what object was acted on  e.g. 'event' | 'student'
+ *   targetId   — DB id of the target object
+ *   details    — arbitrary JSON object with extra context
+ *   success    — boolean (default true)
+ */
+function logAudit({ eventType, actorType, actorId, actorEmail, ip, ua,
+                    targetType, targetId, details, success = true }) {
+  pool.query(
+    `INSERT INTO security_audit_logs
+       (event_type, actor_type, actor_id, actor_email, ip_address, user_agent,
+        target_type, target_id, details, success)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [
+      eventType,
+      actorType  ?? null,
+      actorId    ?? null,
+      actorEmail ?? null,
+      ip         ?? null,
+      ua ? String(ua).slice(0, 500) : null,
+      targetType ?? null,
+      targetId   ?? null,
+      JSON.stringify(details ?? {}),
+      success,
+    ]
+  ).catch(err => console.error("[Audit] Write failed:", err.message));
+}
+
 async function ensureDatabaseSchema() {
   // Ensure admins table exists first (it may already exist)
   await pool.query(`
@@ -657,6 +696,30 @@ async function ensureDatabaseSchema() {
   // Add end_date to events if not present (multi-day event support)
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS end_date DATE`);
 
+  // ── Security Audit Log ────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS security_audit_logs (
+      id          SERIAL PRIMARY KEY,
+      event_type  VARCHAR(60)  NOT NULL,
+      actor_type  VARCHAR(20),
+      actor_id    INT,
+      actor_email VARCHAR(255),
+      ip_address  VARCHAR(60),
+      user_agent  VARCHAR(500),
+      target_type VARCHAR(60),
+      target_id   INT,
+      details     JSONB        NOT NULL DEFAULT '{}',
+      success     BOOLEAN      NOT NULL DEFAULT TRUE,
+      created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_audit_event_type ON security_audit_logs(event_type);
+    CREATE INDEX IF NOT EXISTS idx_audit_actor_id   ON security_audit_logs(actor_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_created_at ON security_audit_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_success     ON security_audit_logs(success)
+  `);
+
   console.log("Database schema and indexes ensured ✓");
 }
 
@@ -913,17 +976,25 @@ app.post("/api/auth/login", authLimiter, checkBruteForce, async (req, res) => {
     );
     if (!studentsRes.rows?.length) {
       recordLoginFailure(req.ip);
+      logAudit({ eventType: "student.login.failed", ip: req.ip, ua: req.headers["user-agent"],
+                 details: { reason: "not_found", admission: admissionNumber.trim().slice(0,20) }, success: false });
       return res.status(401).json({ message: "Invalid admission number or password" });
     }
     const student = studentsRes.rows[0];
     if (student.status === "deleted") {
       recordLoginFailure(req.ip);
+      logAudit({ eventType: "student.login.failed", actorType: "student", actorId: student.id,
+                 actorEmail: student.email, ip: req.ip, ua: req.headers["user-agent"],
+                 details: { reason: "account_deactivated" }, success: false });
       return res.status(401).json({ message: "Account has been deactivated" });
     }
 
     const valid = await bcrypt.compare(password, student.password);
     if (!valid) {
       recordLoginFailure(req.ip);
+      logAudit({ eventType: "student.login.failed", actorType: "student", actorId: student.id,
+                 actorEmail: student.email, ip: req.ip, ua: req.headers["user-agent"],
+                 details: { reason: "wrong_password" }, success: false });
       return res.status(401).json({ message: "Invalid admission number or password" });
     }
     clearLoginFailures(req.ip);
@@ -941,6 +1012,8 @@ app.post("/api/auth/login", authLimiter, checkBruteForce, async (req, res) => {
       name: `${student.first_name} ${student.last_name}`,
       role: "user",
     };
+    logAudit({ eventType: "student.login.success", actorType: "student", actorId: student.id,
+               actorEmail: student.email, ip: req.ip, ua: req.headers["user-agent"] });
     res.json({
       message: "Login successful",
       user,
@@ -969,6 +1042,8 @@ app.post("/api/auth/admin/login", authLimiter, checkBruteForce, async (req, res)
     );
     if (!adminsRes.rows?.length) {
       recordLoginFailure(req.ip);
+      logAudit({ eventType: "admin.login.failed", ip: req.ip, ua: req.headers["user-agent"],
+                 details: { reason: "not_found", email: email.trim().toLowerCase() }, success: false });
       return res.status(401).json({ message: "Invalid credentials" });
     }
     const admin = adminsRes.rows[0];
@@ -977,15 +1052,16 @@ app.post("/api/auth/admin/login", authLimiter, checkBruteForce, async (req, res)
     if (hash.startsWith("$2")) {
       valid = await bcrypt.compare(password, hash);
     } else {
-      // Plaintext hash — do a constant-time comparison to prevent timing attacks,
-      // then force-upgrade to bcrypt on next write
       const dummyHash = "$2b$12$invalidhashpaddingtomatchlength000000000000000000000000";
-      await bcrypt.compare(password, dummyHash); // burn the same time regardless
-      valid = false; // plaintext passwords are never accepted — require bcrypt hash
+      await bcrypt.compare(password, dummyHash);
+      valid = false;
       console.warn(`[Security] Admin ID ${admin.id} has a non-bcrypt password hash — please rehash.`);
     }
     if (!valid) {
       recordLoginFailure(req.ip);
+      logAudit({ eventType: "admin.login.failed", actorType: "admin", actorId: admin.id,
+                 actorEmail: admin.admin_email, ip: req.ip, ua: req.headers["user-agent"],
+                 details: { reason: "wrong_password" }, success: false });
       return res.status(401).json({ message: "Invalid credentials" });
     }
     clearLoginFailures(req.ip);
@@ -1018,6 +1094,9 @@ app.post("/api/auth/admin/login", authLimiter, checkBruteForce, async (req, res)
       role,
       club,
     };
+    logAudit({ eventType: `${role}.login.success`, actorType: role, actorId: admin.id,
+               actorEmail: admin.admin_email, ip: req.ip, ua: req.headers["user-agent"],
+               details: { club: club ?? undefined } });
     res.json({
       message: "Login successful",
       user,
@@ -1422,12 +1501,10 @@ app.delete("/api/events/:id", requireAdminOrLeader, async (req, res) => {
     if (!delRes.rows?.length)
       return res.status(404).json({ message: "Event not found" });
 
-    invalidateCache(
-      "events:all",
-      `event:${id}`,
-      "admin:stats",
-      "events:recent:12",
-    );
+    invalidateCache("events:all", `event:${id}`, "admin:stats", "events:recent:12");
+    logAudit({ eventType: "event.deleted", actorType: req.authUser.role, actorId: req.authUser.id,
+               actorEmail: req.authUser.email, ip: req.ip, ua: req.headers["user-agent"],
+               targetType: "event", targetId: id });
     res.json({ message: "Event deleted successfully" });
   } catch (error) {
     console.error("Delete event error:", error);
@@ -1496,6 +1573,9 @@ app.patch("/api/admin/events/:id/approve", requireAdmin, async (req, res) => {
       });
     }
 
+    logAudit({ eventType: "admin.event.approved", actorType: "admin", actorId: req.authUser.id,
+               actorEmail: req.authUser.email, ip: req.ip, ua: req.headers["user-agent"],
+               targetType: "event", targetId: id, details: { title: event.title } });
     res.json({ message: "Event approved and published" });
   } catch (error) {
     console.error("Approve event error:", error);
@@ -1535,6 +1615,9 @@ app.patch("/api/admin/events/:id/reject", requireAdmin, async (req, res) => {
       });
     }
 
+    logAudit({ eventType: "admin.event.rejected", actorType: "admin", actorId: req.authUser.id,
+               actorEmail: req.authUser.email, ip: req.ip, ua: req.headers["user-agent"],
+               targetType: "event", targetId: id, details: { title: event.title } });
     res.json({ message: "Event rejected" });
   } catch (error) {
     console.error("Reject event error:", error);
@@ -1864,6 +1947,9 @@ app.delete("/api/admin/students/:studentId", requireAdmin, async (req, res) => {
     );
     if (!delRes.rows?.length)
       return res.status(404).json({ message: "Student not found" });
+    logAudit({ eventType: "admin.student.deleted", actorType: "admin", actorId: req.authUser.id,
+               actorEmail: req.authUser.email, ip: req.ip, ua: req.headers["user-agent"],
+               targetType: "student", targetId: studentId });
     res.json({ message: "Student deleted successfully" });
   } catch (error) {
     console.error("Delete student error:", error);
@@ -2178,6 +2264,55 @@ app.put("/api/admin/account", requireAdmin, async (req, res) => {
 
 // ─── ADMIN: SYSTEM SETTINGS ──────────────────────────────────────────────────
 
+// ─── SECURITY AUDIT LOG VIEWER ────────────────────────────────────────────────
+
+app.get("/api/admin/audit-logs", requireAdmin, async (req, res) => {
+  const page     = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit    = Math.min(100, parseInt(req.query.limit) || 50);
+  const offset   = (page - 1) * limit;
+  const filter   = sanitizeStr(req.query.filter || "", 60);   // event_type prefix
+  const onlyFail = req.query.failed === "true";
+
+  try {
+    let whereClause = "WHERE 1=1";
+    const params = [];
+    if (filter) {
+      params.push(`%${filter}%`);
+      whereClause += ` AND event_type ILIKE $${params.length}`;
+    }
+    if (onlyFail) {
+      whereClause += ` AND success = FALSE`;
+    }
+
+    const [logsRes, countRes] = await Promise.all([
+      pool.query(
+        `SELECT id, event_type, actor_type, actor_id, actor_email,
+                ip_address, target_type, target_id, details, success,
+                created_at
+           FROM security_audit_logs
+           ${whereClause}
+           ORDER BY created_at DESC
+           LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        [...params, limit, offset]
+      ),
+      pool.query(
+        `SELECT COUNT(*) AS total FROM security_audit_logs ${whereClause}`,
+        params
+      ),
+    ]);
+
+    res.json({
+      logs:  logsRes.rows  || [],
+      total: parseInt(countRes.rows?.[0]?.total ?? 0),
+      page,
+      limit,
+    });
+  } catch (error) {
+    console.error("Audit log fetch error:", error);
+    res.status(500).json({ message: "Failed to fetch audit logs" });
+  }
+});
+
 app.get("/api/admin/settings", requireAdmin, async (req, res) => {
   try {
     const settingsRes = await pool.query(`SELECT key, value FROM system_settings ORDER BY key`);
@@ -2372,6 +2507,10 @@ app.post("/api/admin/club-leaders", requireAdmin, async (req, res) => {
       ],
     );
     const inserted = insertRes.rows[0];
+    logAudit({ eventType: "admin.club_leader.created", actorType: "admin", actorId: req.authUser.id,
+               actorEmail: req.authUser.email, ip: req.ip, ua: req.headers["user-agent"],
+               targetType: "admin", targetId: inserted.id,
+               details: { leaderEmail: email.trim().toLowerCase(), club: club.trim() } });
     res.status(201).json({
       message: "Club leader created successfully",
       leader: {

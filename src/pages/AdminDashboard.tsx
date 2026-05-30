@@ -1128,6 +1128,177 @@ function ClubLeadersTab() {
   );
 }
 
+// ─── SECURITY AUDIT LOG TAB ───────────────────────────────────────────────────
+
+type AuditLog = {
+  id: number;
+  event_type: string;
+  actor_type?: string;
+  actor_id?: number;
+  actor_email?: string;
+  ip_address?: string;
+  target_type?: string;
+  target_id?: number;
+  details?: Record<string, unknown>;
+  success: boolean;
+  created_at: string;
+};
+
+function SecurityAuditLog() {
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("");
+  const [onlyFailed, setOnlyFailed] = useState(false);
+  const limit = 50;
+
+  const load = async (p = page, f = filter, failed = onlyFailed) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(p), limit: String(limit) });
+      if (f) params.set("filter", f);
+      if (failed) params.set("failed", "true");
+      const data = await api.get(`/admin/audit-logs?${params}`);
+      setLogs(data.logs || []);
+      setTotal(data.total || 0);
+    } catch {
+      /* silent — logs are secondary */
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(1, filter, onlyFailed); }, []);
+
+  const handleFilter = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    load(1, filter, onlyFailed);
+  };
+
+  const toggleFailed = () => {
+    const next = !onlyFailed;
+    setOnlyFailed(next);
+    setPage(1);
+    load(1, filter, next);
+  };
+
+  const eventBadge = (type: string, success: boolean) => {
+    if (!success) return "bg-red-100 text-red-700";
+    if (type.includes("login")) return "bg-green-100 text-green-700";
+    if (type.includes("approved")) return "bg-emerald-100 text-emerald-700";
+    if (type.includes("rejected")) return "bg-orange-100 text-orange-700";
+    if (type.includes("deleted")) return "bg-red-100 text-red-700";
+    if (type.includes("created")) return "bg-blue-100 text-blue-700";
+    return "bg-gray-100 text-gray-700";
+  };
+
+  const totalPages = Math.ceil(total / limit);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 mb-2">
+        <Shield className="w-6 h-6 text-blue-600" />
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Security Audit Log</h2>
+          <p className="text-sm text-gray-500">Full paper trail of logins, failed attempts, and admin actions</p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <form onSubmit={handleFilter} className="flex flex-wrap gap-2 items-center">
+        <Input
+          placeholder="Filter by event type (e.g. login, approved)"
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          className="max-w-xs text-sm"
+        />
+        <Button type="submit" size="sm" variant="outline">Search</Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={onlyFailed ? "destructive" : "outline"}
+          onClick={toggleFailed}
+        >
+          {onlyFailed ? "Showing Failures Only" : "Show Failures Only"}
+        </Button>
+        <span className="text-xs text-gray-500 ml-auto">{total.toLocaleString()} total entries</span>
+      </form>
+
+      {/* Log table */}
+      <Card className="border-0 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Time</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Event</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Actor</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">IP Address</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Target</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Details</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                <tr><td colSpan={6} className="text-center py-10 text-gray-400">Loading…</td></tr>
+              ) : logs.length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-10 text-gray-400">No audit logs found</td></tr>
+              ) : logs.map(log => (
+                <tr key={log.id} className={`hover:bg-gray-50 ${!log.success ? "bg-red-50/50" : ""}`}>
+                  <td className="px-4 py-2.5 whitespace-nowrap text-gray-500 font-mono">
+                    {new Date(log.created_at).toLocaleString("en-KE", { dateStyle: "short", timeStyle: "medium" })}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${eventBadge(log.event_type, log.success)}`}>
+                      {log.success ? "" : "✗ "}{log.event_type}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {log.actor_email ? (
+                      <div>
+                        <div className="font-medium text-gray-800">{log.actor_email}</div>
+                        <div className="text-gray-400">{log.actor_type} {log.actor_id ? `#${log.actor_id}` : ""}</div>
+                      </div>
+                    ) : <span className="text-gray-400">—</span>}
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-gray-500">{log.ip_address || "—"}</td>
+                  <td className="px-4 py-2.5 text-gray-500">
+                    {log.target_type ? `${log.target_type} #${log.target_id}` : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 max-w-xs">
+                    {log.details && Object.keys(log.details).length > 0
+                      ? <span className="text-gray-500 truncate block max-w-[200px]" title={JSON.stringify(log.details)}>
+                          {Object.entries(log.details).map(([k, v]) => `${k}: ${v}`).join(", ")}
+                        </span>
+                      : <span className="text-gray-400">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <Button
+            size="sm" variant="outline" disabled={page <= 1}
+            onClick={() => { const p = page - 1; setPage(p); load(p); }}
+          >Previous</Button>
+          <span className="text-sm text-gray-600">Page {page} of {totalPages}</span>
+          <Button
+            size="sm" variant="outline" disabled={page >= totalPages}
+            onClick={() => { const p = page + 1; setPage(p); load(p); }}
+          >Next</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN ADMIN DASHBOARD ─────────────────────────────────────────────────────
 
 const AdminDashboard = () => {
@@ -1215,6 +1386,7 @@ const AdminDashboard = () => {
     { id: "students", label: "Students", icon: Users },
     { id: "categories", label: "Categories", icon: ChevronRight },
     { id: "system", label: "System Settings", icon: Settings },
+    { id: "audit", label: "Security Audit", icon: Shield },
   ];
 
   return (
@@ -1566,6 +1738,7 @@ const AdminDashboard = () => {
           {activeView === "system" && (
             <AdminCombinedSettings user={user} />
           )}
+          {activeView === "audit" && <SecurityAuditLog />}
         </div>
 
         {/* Minimal Footer */}
