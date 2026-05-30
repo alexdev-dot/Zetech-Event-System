@@ -8,6 +8,7 @@ expertMode = true
 [userenv]
 
 [userenv.shared]
+JWT_SECRET = "83974cd0811d4bd337b87342e16c83876457311856ff26205ddad52dc433fe1537207fc1d17602e9f2bf55a299c8184ea327601024f5f1388952e73929e64395"
 
 [workflows]
 runButton = "Project"

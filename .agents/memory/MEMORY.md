@@ -1,3 +1,4 @@
 - [Supabase via HTTPS RPC](supabase-https-rpc.md) — Replit blocks ports 5432 & 6543; all SQL routes through exec_sql PostgreSQL function over HTTPS
 - [Supabase exec_sql aggregation bug](supabase-exec-sql-agg.md) — JSON_AGG with FILTER inside exec_sql wrapper silently returns []; always split into two SELECTs and join in JS.
 - [Categories cache key](categories-cache.md) — pub_categories (NodeCache, 300s); all 6 category/subcategory mutation handlers call cache.del("pub_categories") on success.
+- [Security & Scalability Hardening](security-hardening.md) — key decisions from comprehensive security pass; must stay consistent when adding new routes.
