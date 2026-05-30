@@ -273,7 +273,8 @@ const ClubLeaderDashboard = () => {
   const resetEditForm = () => {
     setShowEditEvent(false);
     setEditingEvent(null);
-    setEventForm({ title: "", description: "", date: "", time: "", location: "", maxParticipants: "", category: "", imageUrl: "" });
+    setEventForm({ title: "", description: "", date: "", endDate: "", location: "", maxParticipants: "", category: "", imageUrl: "" });
+    resetTimeForm();
     setUploadedFile(null);
     setPreviewUrl("");
   };
@@ -282,26 +283,28 @@ const ClubLeaderDashboard = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      // Validate required fields
-      if (!eventForm.title.trim()) throw new Error("Event title is required");
+      if (!eventForm.title.trim())       throw new Error("Event title is required");
       if (!eventForm.description.trim()) throw new Error("Event description is required");
-      if (!eventForm.date) throw new Error("Event date is required");
-      if (!eventForm.time) throw new Error("Event time is required");
-      if (!eventForm.location.trim()) throw new Error("Event venue is required");
-      if (!eventForm.imageUrl) throw new Error("Event flyer is required - please upload an image");
+      if (!eventForm.date)               throw new Error("Event date is required");
+      if (!eventForm.location.trim())    throw new Error("Event venue is required");
+      if (!eventForm.imageUrl)           throw new Error("Event flyer is required – please upload an image");
+      if (durationType === "multi" && !eventForm.endDate) throw new Error("End date is required for multi-day events");
+      if (durationType === "multi" && eventForm.endDate < eventForm.date)
+        throw new Error("End date must be on or after the start date");
 
       await api.events.update(String(editingEvent.id), {
-        title: eventForm.title.trim(),
-        description: eventForm.description.trim(),
-        date: eventForm.date,
-        time: eventForm.time,
-        location: eventForm.location.trim(),
-        category: dashboardData?.club || user?.club || "General",
+        title:           eventForm.title.trim(),
+        description:     eventForm.description.trim(),
+        date:            eventForm.date,
+        endDate:         durationType === "multi" ? eventForm.endDate : undefined,
+        time:            buildTime(),
+        location:        eventForm.location.trim(),
+        category:        dashboardData?.club || user?.club || "General",
         maxParticipants: eventForm.maxParticipants ? parseInt(eventForm.maxParticipants) : undefined,
-        imageUrl: eventForm.imageUrl,
+        imageUrl:        eventForm.imageUrl,
       });
 
-      toast({ title: "Event updated successfully" });
+      toast({ title: "Event resubmitted!", description: "Your changes are awaiting admin approval." });
       resetEditForm();
       loadDashboard();
     } catch (error: any) {
@@ -388,22 +391,31 @@ const ClubLeaderDashboard = () => {
 
   const openEditEvent = (event: any) => {
     setEditingEvent(event);
+
+    // Parse stored time string "09:30 AM" → picker state
+    const rawTime: string = event.time || "08:00 AM";
+    const [timePart, periodPart] = rawTime.split(" ");
+    const [hStr, mStr] = (timePart || "08:00").split(":");
+    const parsedHour = parseInt(hStr || "8", 10);
+    setTimeHour(String(isNaN(parsedHour) || parsedHour === 0 ? 8 : parsedHour));
+    setTimeMinute(mStr && TIME_MINUTES.includes(mStr) ? mStr : "00");
+    setTimeAmpm((periodPart === "PM" ? "PM" : "AM") as "AM" | "PM");
+
+    // Detect multi-day
+    const hasEndDate = !!event.end_date && event.end_date !== event.date;
+    setDurationType(hasEndDate ? "multi" : "single");
+
     setEventForm({
-      title: event.title,
-      description: event.description,
-      date: event.date,
-      time: event.time,
-      location: event.location,
+      title:           event.title            || "",
+      description:     event.description      || "",
+      date:            event.date             || "",
+      endDate:         hasEndDate ? event.end_date : "",
+      location:        event.location         || "",
       maxParticipants: event.max_participants ? String(event.max_participants) : "",
-      category: event.category,
-      imageUrl: event.image_url || ""
+      category:        event.category         || "",
+      imageUrl:        event.image_url        || "",
     });
-    // Set preview URL if event has an image
-    if (event.image_url) {
-      setPreviewUrl(event.image_url);
-    } else {
-      setPreviewUrl("");
-    }
+    setPreviewUrl(event.image_url || "");
     setUploadedFile(null);
     setShowEditEvent(true);
   };
@@ -1007,18 +1019,18 @@ const ClubLeaderDashboard = () => {
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
-                            {event.status === "pending" && (
+                            {["pending","rejected","upcoming"].includes(event.status) && (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className="text-blue-500 hover:bg-blue-50"
                                 onClick={() => openEditEvent(event)}
-                                title="Edit event"
+                                title={event.status === "upcoming" ? "Edit & resubmit for approval" : "Edit event"}
                               >
                                 <Edit className="w-4 h-4" />
                               </Button>
                             )}
-                            {event.status !== "pending" && (
+                            {!["pending","rejected"].includes(event.status) && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -1174,10 +1186,23 @@ const ClubLeaderDashboard = () => {
       </main>
 
       {/* Edit Event Dialog */}
-      <Dialog open={showEditEvent} onOpenChange={setShowEditEvent}>
+      <Dialog open={showEditEvent} onOpenChange={(open) => { if (!open) resetEditForm(); else setShowEditEvent(true); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Edit Event</DialogTitle></DialogHeader>
-          <form onSubmit={handleEditEvent} className="space-y-4 pt-2">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5 text-green-600" /> Edit & Resubmit Event
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Re-approval banner */}
+          <div className="px-1">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+              <span>Saving changes will reset this event to <strong>Pending</strong> — an admin must approve it again before it becomes visible to students.</span>
+            </div>
+          </div>
+
+          <form onSubmit={handleEditEvent} className="space-y-4 pt-1">
             <div>
               <Label>Event Title *</Label>
               <Input value={eventForm.title} onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })} required className="mt-1" />
@@ -1186,16 +1211,61 @@ const ClubLeaderDashboard = () => {
               <Label>Description *</Label>
               <Textarea value={eventForm.description} onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })} rows={3} required className="mt-1" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Date *</Label>
-                <Input type="date" value={eventForm.date} onChange={(e) => setEventForm({ ...eventForm, date: e.target.value })} required className="mt-1" />
-              </div>
-              <div>
-                <Label>Time *</Label>
-                <Input type="time" value={eventForm.time} onChange={(e) => setEventForm({ ...eventForm, time: e.target.value })} required className="mt-1" />
+
+            {/* ── Duration toggle ── */}
+            <div>
+              <Label className="flex items-center gap-2 mb-2"><CalendarDays className="h-4 w-4" /> Event Duration *</Label>
+              <div className="flex gap-2">
+                {(["single","multi"] as const).map(t => (
+                  <button key={t} type="button"
+                    onClick={() => { setDurationType(t); if (t==="single") setEventForm(f=>({...f,endDate:""})); }}
+                    className={`flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all
+                      ${durationType===t ? "border-green-600 bg-green-50 text-green-700" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}>
+                    {t==="single" ? "📅 Single Day" : "📅📅 Multiple Days"}
+                  </button>
+                ))}
               </div>
             </div>
+
+            {/* ── Date(s) ── */}
+            <div className={`grid gap-3 ${durationType==="multi" ? "grid-cols-2" : "grid-cols-1"}`}>
+              <div>
+                <Label>{durationType==="multi" ? "Start Date *" : "Date *"}</Label>
+                <Input type="date" value={eventForm.date} onChange={(e) => setEventForm({ ...eventForm, date: e.target.value })} required className="mt-1" />
+              </div>
+              {durationType==="multi" && (
+                <div>
+                  <Label>End Date *</Label>
+                  <Input type="date" value={eventForm.endDate} onChange={(e) => setEventForm({ ...eventForm, endDate: e.target.value })} required className="mt-1" min={eventForm.date} />
+                </div>
+              )}
+            </div>
+
+            {/* ── AM/PM Time picker ── */}
+            <div>
+              <Label className="flex items-center gap-2 mb-2"><Clock className="h-4 w-4" /> Start Time *</Label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select value={timeHour} onValueChange={setTimeHour}>
+                  <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                  <SelectContent>{TIME_HOURS.map(h=><SelectItem key={h} value={h}>{h.padStart(2,"0")}</SelectItem>)}</SelectContent>
+                </Select>
+                <span className="font-bold text-muted-foreground">:</span>
+                <Select value={timeMinute} onValueChange={setTimeMinute}>
+                  <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                  <SelectContent>{TIME_MINUTES.map(m=><SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+                <div className="flex rounded-lg border overflow-hidden">
+                  {(["AM","PM"] as const).map(p=>(
+                    <button key={p} type="button" onClick={()=>setTimeAmpm(p)}
+                      className={`px-3 py-2 text-sm font-semibold transition-all ${timeAmpm===p ? "bg-green-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-muted-foreground bg-muted px-2 py-2 rounded font-mono">{buildTime()}</span>
+              </div>
+            </div>
+
             <div>
               <Label>Venue *</Label>
               <Input value={eventForm.location} onChange={(e) => setEventForm({ ...eventForm, location: e.target.value })} required className="mt-1" />
@@ -1275,7 +1345,7 @@ const ClubLeaderDashboard = () => {
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={resetEditForm}>Cancel</Button>
               <Button type="submit" disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
-                {isSubmitting ? "Updating..." : "Update Event"}
+                {isSubmitting ? "Resubmitting..." : "Save & Resubmit for Approval"}
               </Button>
             </div>
           </form>

@@ -1278,6 +1278,7 @@ app.put("/api/events/:id", requireAdminOrLeader, async (req, res) => {
 
   const { title, description, date, time, location, category, status } =
     req.body;
+  const endDate     = req.body.endDate     ?? req.body.end_date     ?? null;
   const maxParticipants = req.body.maxParticipants ?? req.body.max_participants;
   const imageUrl = req.body.imageUrl ?? req.body.image_url;
   if (!title || !description || !date || !time || !location || !category)
@@ -1297,25 +1298,26 @@ app.put("/api/events/:id", requireAdminOrLeader, async (req, res) => {
           .json({ message: "You can only edit your own events" });
     }
 
-    const validStatuses =
-      req.authUser.role === "admin"
-        ? [
-            "pending",
-            "upcoming",
-            "ongoing",
-            "completed",
-            "cancelled",
-            "rejected",
-          ]
-        : ["pending", "upcoming", "ongoing", "completed", "cancelled"];
-    const safeStatus = validStatuses.includes(status) ? status : "upcoming";
+    // Club leaders always resubmit as pending; admins may set any status
+    let safeStatus;
+    if (req.authUser.role === "club_leader") {
+      safeStatus = "pending";
+    } else {
+      const validStatuses = ["pending","upcoming","ongoing","completed","cancelled","rejected"];
+      safeStatus = validStatuses.includes(status) ? status : "upcoming";
+    }
 
     const updRes = await pool.query(
-      `UPDATE events SET title=$1, description=$2, date=$3, time=$4, location=$5, category=$6, max_participants=$7, image_url=COALESCE($8, image_url), status=$9 WHERE id=$10 RETURNING id`,
+      `UPDATE events
+          SET title=$1, description=$2, date=$3, end_date=$4, time=$5,
+              location=$6, category=$7, max_participants=$8,
+              image_url=COALESCE($9, image_url), status=$10
+        WHERE id=$11 RETURNING id`,
       [
         title.trim(),
         description.trim(),
         date,
+        endDate || null,
         time,
         location.trim(),
         category,
