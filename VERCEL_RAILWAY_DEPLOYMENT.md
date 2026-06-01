@@ -1,15 +1,15 @@
-# Vercel + Railway Deployment Guide
+# Vercel + Render Deployment Guide
 
 This guide provides step-by-step instructions for deploying the Zetech Event System with:
 - **Frontend**: Vercel
-- **Backend**: Railway
+- **Backend**: Render
 - **Database**: Supabase
 
 ## Architecture Overview
 
 ```
 ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-│   Vercel    │────────▶│  Railway    │────────▶│  Supabase   │
+│   Vercel    │────────▶│   Render    │────────▶│  Supabase   │
 │  (Frontend) │  HTTPS  │  (Backend)  │  HTTPS  │  (Database) │
 └─────────────┘         └─────────────┘         └─────────────┘
 ```
@@ -17,7 +17,7 @@ This guide provides step-by-step instructions for deploying the Zetech Event Sys
 ## Important Notes for University/Enterprise Deployment
 
 **Before deploying in university systems:**
-- Ensure outbound HTTPS traffic is allowed to `*.vercel.app`, `*.railway.app`, and `*.supabase.co`
+- Ensure outbound HTTPS traffic is allowed to `*.vercel.app`, `*.onrender.com`, and `*.supabase.co`
 - Verify firewall rules allow WebSocket connections (ports 443/80)
 - Check if proxy servers require special configuration
 - Confirm that GitHub integration is accessible from your network
@@ -26,7 +26,7 @@ This guide provides step-by-step instructions for deploying the Zetech Event Sys
 ## Prerequisites
 
 - Vercel account (free tier available)
-- Railway account (free tier available)
+- Render account (free tier available)
 - Supabase account with project configured
 - GitHub repository with your code
 - Domain name (optional, but recommended for production)
@@ -89,29 +89,28 @@ uploads/
 ### 0.4 Commit All Changes
 ```bash
 git add .
-git commit -m "Pre-deployment: Ready for Vercel/Railway deployment"
+git commit -m "Pre-deployment: Ready for Vercel/Render deployment"
 git push origin main
 ```
 
 ## Step 1: Prepare Your Repository
 
-### 1.1 Create Railway-Specific Configuration
+### 1.1 Create Render-Specific Configuration
 
-Create `backend/railway.json`:
-```json
-{
-  "$schema": "https://railway.app/railway.schema.json",
-  "build": {
-    "builder": "NIXPACKS"
-  },
-  "deploy": {
-    "healthcheckPath": "/api/health",
-    "healthcheckTimeout": 100,
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10,
-    "numReplicas": 1
-  }
-}
+Create `render.yaml` in the root directory:
+```yaml
+services:
+  - type: web
+    name: zetech-event-backend
+    env: node
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+    healthCheckPath: /api/health
 ```
 
 **IMPORTANT**: Commit this file to your repository before deploying.
@@ -127,15 +126,15 @@ Create `vercel.json` in the root:
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://your-railway-backend-url.railway.app/api/:path*"
+      "destination": "https://your-render-backend.onrender.com/api/:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "https://your-railway-backend-url.railway.app/uploads/:path*"
+      "destination": "https://your-render-backend.onrender.com/uploads/:path*"
     },
     {
       "source": "/socket.io/:path*",
-      "destination": "https://your-railway-backend-url.railway.app/socket.io/:path*"
+      "destination": "https://your-render-backend.onrender.com/socket.io/:path*"
     },
     {
       "source": "/(.*)",
@@ -169,9 +168,9 @@ Create `vercel.json` in the root:
 Create or update `src/config/api.ts`:
 ```typescript
 // src/config/api.ts
-const API_URL = import.meta.env.VITE_API_URL || 
-  (import.meta.env.MODE === 'production' 
-    ? 'https://your-railway-backend-url.railway.app' 
+const API_URL = import.meta.env.VITE_API_URL ||
+  (import.meta.env.MODE === 'production'
+    ? 'https://your-render-backend.onrender.com'
     : 'http://localhost:3001');
 
 export const API_BASE_URL = API_URL;
@@ -179,26 +178,27 @@ export const API_BASE_URL = API_URL;
 
 **IMPORTANT**: This configuration ensures the frontend dynamically uses the backend URL from environment variables, making deployment flexible and environment-independent.
 
-## Step 2: Deploy Backend to Railway
+## Step 2: Deploy Backend to Render
 
-### 2.1 Create Railway Project
+### 2.1 Create Render Project
 
-1. Go to [railway.app](https://railway.app)
-2. Click "New Project"
-3. Select "Deploy from GitHub repo"
-4. Choose your repository
-5. Railway will detect it as a Node.js project
+1. Go to [render.com](https://render.com)
+2. Click "New +"
+3. Select "Web Service"
+4. Connect your GitHub repository
+5. Render will detect it as a Node.js project
 
 ### 2.2 Configure Backend Service
 
-1. Click on your backend service
-2. Go to "Settings" tab
-3. Set the root directory to `backend`
+1. Set the name to `zetech-event-backend`
+2. Set the root directory to `backend`
+3. Set the build command to `npm install`
 4. Set the start command to `node server.js`
+5. Select "Free" tier
 
-### 2.3 Add Environment Variables in Railway
+### 2.3 Add Environment Variables in Render
 
-Go to the "Variables" tab in Railway and add these variables **EXACTLY** as shown:
+Go to the "Environment" tab in Render and add these variables **EXACTLY** as shown:
 
 ```env
 NODE_ENV=production
@@ -229,13 +229,13 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 - Set `CLIENT_URL` to `https://localhost:3000` initially if frontend is not yet deployed
 - Update `CLIENT_URL` to the actual Vercel URL after frontend deployment (Step 4)
 - All variable names are CASE-SENSITIVE
-- Do NOT use quotes around values in Railway's UI
+- Do NOT use quotes around values in Render's UI
 
 ### 2.4 Deploy Backend
 
-1. Click "Deploy" in Railway
+1. Click "Create Web Service" in Render
 2. Wait for the deployment to complete
-3. Railway will provide a URL like: `https://your-backend-name.up.railway.app`
+3. Render will provide a URL like: `https://your-backend-name.onrender.com`
 4. Copy this URL - you'll need it for Vercel configuration
 
 ### 2.5 Verify Backend Deployment
@@ -243,29 +243,29 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 Test your backend health endpoint:
 ```bash
 # Test health endpoint
-curl https://your-backend-name.up.railway.app/api/health
+curl https://your-backend-name.onrender.com/api/health
 
 # Expected response: {"status":"ok","message":"Server is running"}
 ```
 
 **If the health check fails:**
-1. Check Railway deployment logs for errors
+1. Check Render deployment logs for errors
 2. Verify all environment variables are set correctly
 3. Ensure Supabase credentials are valid
 4. Check that the backend is not in a crashed state
-5. Try redeploying from Railway dashboard
+5. Try redeploying from Render dashboard
 
 ### 2.6 Test Backend API Endpoints
 
 Before proceeding, test critical backend endpoints:
 ```bash
 # Test health
-curl https://your-backend-name.up.railway.app/api/health
+curl https://your-backend-name.onrender.com/api/health
 
 # Test CORS (should return 404 or appropriate error for non-existent route)
 curl -H "Origin: https://your-vercel-url.vercel.app" \
      -H "Access-Control-Request-Method: POST" \
-     -X OPTIONS https://your-backend-name.up.railway.app/api/test
+     -X OPTIONS https://your-backend-name.onrender.com/api/test
 ```
 
 ## Step 3: Deploy Frontend to Vercel
@@ -290,13 +290,13 @@ Vercel should auto-detect these settings. Verify:
 Go to "Settings" > "Environment Variables" and add these variables **EXACTLY** as shown:
 
 ```env
-VITE_API_URL=https://your-backend-name.up.railway.app
+VITE_API_URL=https://your-backend-name.onrender.com
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
 **CRITICAL NOTES:**
-- Replace `your-backend-name.up.railway.app` with your ACTUAL Railway backend URL from Step 2.4
+- Replace `your-backend-name.onrender.com` with your ACTUAL Render backend URL from Step 2.4
 - All Vite environment variables MUST start with `VITE_` prefix
 - Variable names are CASE-SENSITIVE
 - Set these for ALL environments (Production, Preview, Development)
@@ -308,17 +308,17 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 After deploying the backend and getting its URL, update `vercel.json`:
 
 1. Open `vercel.json` in your repository
-2. Replace ALL occurrences of `your-railway-backend-url.railway.app` with your actual Railway backend URL
+2. Replace ALL occurrences of `your-render-backend.onrender.com` with your actual Render backend URL
 3. Commit and push the changes:
    ```bash
    git add vercel.json
-   git commit -m "Update Vercel config with Railway backend URL"
+   git commit -m "Update Vercel config with Render backend URL"
    git push origin main
    ```
 4. Vercel will automatically redeploy with the new configuration
 
 **IMPORTANT**: The rewrites in vercel.json are critical for:
-- API proxying to Railway backend
+- API proxying to Render backend
 - File upload handling
 - WebSocket support
 - SPA routing
@@ -329,18 +329,18 @@ After deploying the backend and getting its URL, update `vercel.json`:
 2. Wait for deployment to complete
 3. Vercel will provide a URL like: `https://your-project-name.vercel.app`
 
-## Step 4: Update Railway Backend CORS
+## Step 4: Update Render Backend CORS
 
-After deploying the frontend, update the `CLIENT_URL` in Railway:
+After deploying the frontend, update the `CLIENT_URL` in Render:
 
-1. Go to Railway backend service
-2. Go to "Variables" tab
+1. Go to Render backend service
+2. Go to "Environment" tab
 3. Update `CLIENT_URL` to your Vercel URL:
    ```env
    CLIENT_URL=https://your-project-name.vercel.app
    ```
-4. Click "Save"
-5. Redeploy the backend (click "Redeploy" button)
+4. Click "Save Changes"
+5. Render will automatically redeploy with the new environment variable
 6. Wait for redeployment to complete
 
 **CRITICAL**: The `CLIENT_URL` MUST match your Vercel URL exactly (including https:// and no trailing slash) for CORS to work properly.
@@ -424,7 +424,7 @@ fetch(`${API_BASE_URL}/api/health`)
 
 ```bash
 # Test health endpoint
-curl https://your-backend-name.up.railway.app/api/health
+curl https://your-backend-name.onrender.com/api/health
 
 # Expected response: {"status":"ok","message":"Server is running"}
 ```
@@ -457,8 +457,8 @@ Open browser DevTools (F12) and check for:
 # Test Vercel connectivity
 curl -I https://vercel.com
 
-# Test Railway connectivity
-curl -I https://railway.app
+# Test Render connectivity
+curl -I https://render.com
 
 # Test Supabase connectivity
 curl -I https://supabase.com
@@ -474,24 +474,24 @@ curl -I https://supabase.com
 2. Add your custom domain
 3. Configure DNS records as instructed by Vercel
 
-### 8.2 Railway Custom Domain (Optional)
+### 8.2 Render Custom Domain (Optional)
 
-1. Go to Railway backend service "Settings" > "Networking"
+1. Go to Render backend service "Settings" > "Domains"
 2. Add your custom domain
-3. Configure DNS records
+3. Configure DNS records as instructed by Render
 
 ### 8.3 Update Environment Variables
 
 After setting custom domains, update:
-- `CLIENT_URL` in Railway to your custom frontend domain
+- `CLIENT_URL` in Render to your custom frontend domain
 - `VITE_API_URL` in Vercel to your custom backend domain (if using custom backend domain)
 
 ## Step 9: Monitor and Maintain
 
-### 9.1 Railway Monitoring
+### 9.1 Render Monitoring
 
-- Check Railway dashboard for backend health
-- Monitor logs in Railway console
+- Check Render dashboard for backend health
+- Monitor logs in Render console
 - Set up alerts for deployment failures
 
 ### 9.2 Vercel Monitoring
@@ -687,8 +687,8 @@ After setting custom domains, update:
    git push origin main
    ```
 
-2. **Railway will auto-deploy backend**
-   - Monitor deployment in Railway dashboard
+2. **Render will auto-deploy backend**
+   - Monitor deployment in Render dashboard
    - Check logs for errors
    - Verify health endpoint after deployment
 
@@ -716,8 +716,8 @@ If deployment causes issues:
 3. Find the previous successful deployment
 4. Click "Promote to Production"
 
-**Backend Rollback (Railway):**
-1. Go to Railway dashboard
+**Backend Rollback (Render):**
+1. Go to Render dashboard
 2. Navigate to "Deployments"
 3. Find the previous successful deployment
 4. Click "Redeploy" on that version
@@ -759,10 +759,10 @@ else
     exit 1
 fi
 
-if [ -f "backend/railway.json" ]; then
-    echo "✓ backend/railway.json exists"
+if [ -f "render.yaml" ]; then
+    echo "✓ render.yaml exists"
 else
-    echo "✗ ERROR: backend/railway.json missing"
+    echo "✗ ERROR: render.yaml missing"
     exit 1
 fi
 
@@ -788,16 +788,16 @@ chmod +x validate-deployment.sh
 ## Support and Resources
 
 - **Vercel Docs**: https://vercel.com/docs
-- **Railway Docs**: https://docs.railway.app
+- **Render Docs**: https://render.com/docs
 - **Supabase Docs**: https://supabase.com/docs
 - **Project README**: See main README.md for application details
 - **API Documentation**: See backend/API.md
 
 ## Quick Reference
 
-### Railway Backend URL Format
+### Render Backend URL Format
 ```
-https://your-project-name.up.railway.app
+https://your-project-name.onrender.com
 ```
 
 ### Vercel Frontend URL Format
@@ -807,7 +807,7 @@ https://your-project-name.vercel.app
 
 ### Environment Variable Summary
 
-**Railway (Backend)**:
+**Render (Backend)**:
 - `NODE_ENV=production`
 - `PORT=3001`
 - `CLIENT_URL=https://your-vercel-app.vercel.app`
@@ -817,7 +817,7 @@ https://your-project-name.vercel.app
 - `SUPABASE_ANON_KEY=your_anon_key`
 
 **Vercel (Frontend)**:
-- `VITE_API_URL=https://your-railway-app.up.railway.app`
+- `VITE_API_URL=https://your-render-app.onrender.com`
 - `VITE_SUPABASE_URL=your_supabase_url`
 - `VITE_SUPABASE_ANON_KEY=your_anon_key`
 
@@ -826,14 +826,14 @@ https://your-project-name.vercel.app
 Before considering deployment complete:
 
 ### Infrastructure
-- [ ] Backend deployed successfully on Railway
+- [ ] Backend deployed successfully on Render
 - [ ] Frontend deployed successfully on Vercel
 - [ ] Custom domain configured (if applicable)
 - [ ] SSL/HTTPS enabled (automatic on both platforms)
 
 ### Backend Verification
 - [ ] Backend health check returns 200 OK
-- [ ] Environment variables set correctly in Railway
+- [ ] Environment variables set correctly in Render
 - [ ] Supabase database accessible from backend
 - [ ] CORS configured with correct CLIENT_URL
 - [ ] WebSocket connections established (test real-time features)
@@ -884,19 +884,19 @@ Before considering deployment complete:
 
 **Deployment Order:**
 1. Complete pre-deployment checklist (Step 0)
-2. Deploy backend to Railway (Step 2)
+2. Deploy backend to Render (Step 2)
 3. Deploy frontend to Vercel (Step 3)
-4. Update Railway CORS with Vercel URL (Step 4)
+4. Update Render CORS with Vercel URL (Step 4)
 5. Configure Supabase (Step 5)
 6. Test everything thoroughly (Step 7)
 
 **Critical URLs to Save:**
-- Railway Backend URL: `https://your-backend-name.up.railway.app`
+- Render Backend URL: `https://your-backend-name.onrender.com`
 - Vercel Frontend URL: `https://your-project-name.vercel.app`
 - Supabase Dashboard: `https://app.supabase.com`
 
 **Critical Environment Variables:**
-- Railway: `NODE_ENV`, `PORT`, `CLIENT_URL`, `JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`
+- Render: `NODE_ENV`, `PORT`, `CLIENT_URL`, `JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`
 - Vercel: `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
 **Common Issues & Quick Fixes:**

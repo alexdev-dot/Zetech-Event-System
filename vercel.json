@@ -5,15 +5,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://your-railway-backend-url.railway.app/api/:path*"
+      "destination": "https://your-render-backend.onrender.com/api/:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "https://your-railway-backend-url.railway.app/uploads/:path*"
+      "destination": "https://your-render-backend.onrender.com/uploads/:path*"
     },
     {
       "source": "/socket.io/:path*",
-      "destination": "https://your-railway-backend-url.railway.app/socket.io/:path*"
+      "destination": "https://your-render-backend.onrender.com/socket.io/:path*"
     },
     {
       "source": "/(.*)",
