@@ -58,7 +58,7 @@ The Zetech Event System is a full-stack web application built with a modern, sca
 │  │  - Admins (Admin & Club Leaders)                              │ │
 │  │  - Events                                                     │ │
 │  │  - Event Registrations                                        │ │
-│  │  - Event Reactions/Comments/Polls                             │ │
+│  │  - Event Reactions/Comments                                   │ │
 │  │  - Security Audit Logs                                        │ │
 │  └──────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
@@ -200,7 +200,7 @@ backend/
 #### 3. Real-time Communication (Socket.io)
 - WebSocket connections for live updates
 - Room-based subscriptions (user-specific, admin, club)
-- Event notifications (registrations, approvals, polls)
+- Event notifications (registrations, approvals)
 
 #### 4. File Upload System
 - Multer for multipart/form-data handling
@@ -273,15 +273,9 @@ backend/
 8. **event_gallery**
    - Event images uploaded by admins
 
-9. **event_polls**
-   - Polls for events
-
-10. **event_poll_votes**
-    - Poll votes by students
-
 #### System Tables
 
-11. **system_settings**
+9. **system_settings**
     - Application configuration
     - Key-value pairs for system settings
 
@@ -547,8 +541,6 @@ io.emit('event:approved', event)
 io.to(`user:${creatorId}`).emit('event:your-event-approved', event)
 io.to(`user:${creatorId}`).emit('event:rejected', event)
 
-// Poll events
-io.emit('event:poll-update', pollData)
 ```
 
 ### Socket Context (Frontend)
@@ -631,8 +623,6 @@ POST   /api/events/:id/reactions       - Add reaction
 DELETE /api/events/:id/reactions       - Remove reaction
 POST   /api/events/:id/comments        - Add comment
 POST   /api/events/:id/waitlist       - Join waitlist
-POST   /api/events/:id/polls          - Create poll
-POST   /api/events/:id/polls/:pollId/vote - Vote in poll
 ```
 
 #### System

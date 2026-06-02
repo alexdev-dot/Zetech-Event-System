@@ -194,7 +194,7 @@ const EventCard = ({ event }: { event: Event }) => {
     >
       {/* Image container with enhanced hover effect */}
 
-      <div className="relative overflow-hidden h-48 sm:h-56 lg:h-64">
+      <div className="relative overflow-hidden h-40 sm:h-48 md:h-56 lg:h-64">
         {event.posterUrl && !imageError ? (
           <div className="relative w-full h-full">
             <img
@@ -215,25 +215,25 @@ const EventCard = ({ event }: { event: Event }) => {
                 {month}
               </div>
 
-              <div className="text-5xl font-heading font-bold">{day}</div>
+              <div className="text-4xl sm:text-5xl font-heading font-bold">{day}</div>
             </div>
 
-            <Sparkles className="absolute top-4 right-4 w-8 h-8 text-white/20 animate-pulse" />
+            <Sparkles className="absolute top-4 right-4 w-6 h-6 sm:w-8 sm:h-8 text-white/20 animate-pulse" />
           </div>
         )}
 
         {/* Enhanced date badge */}
 
-        <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md rounded-xl p-3 text-center min-w-[70px] shadow-lg border border-white/20 transform transition-all duration-300 group-hover:scale-110 group-hover:shadow-xl">
-          <div className="text-xs font-bold text-gray-600">{month}</div>
+        <div className="absolute top-3 left-3 sm:top-4 sm:left-4 bg-white/95 backdrop-blur-md rounded-xl p-2 sm:p-3 text-center min-w-[60px] sm:min-w-[70px] shadow-lg border border-white/20 transform transition-all duration-300 group-hover:scale-110 group-hover:shadow-xl">
+          <div className="text-[10px] sm:text-xs font-bold text-gray-600">{month}</div>
 
-          <div className="text-xl font-bold text-gray-900">{day}</div>
+          <div className="text-lg sm:text-xl font-bold text-gray-900">{day}</div>
         </div>
 
         {/* Enhanced category badge */}
 
         <Badge
-          className={`absolute top-4 right-4 ${categoryColor.bg} ${categoryColor.text} ${categoryColor.border} border px-3 py-1 rounded-full text-xs font-semibold shadow-lg backdrop-blur-sm`}
+          className={`absolute top-3 right-3 sm:top-4 sm:right-4 ${categoryColor.bg} ${categoryColor.text} ${categoryColor.border} border px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold shadow-lg backdrop-blur-sm`}
         >
           {event.category}
         </Badge>
@@ -241,7 +241,7 @@ const EventCard = ({ event }: { event: Event }) => {
         {/* Registration status indicator */}
 
         {isAlmostFull && (
-          <div className="absolute bottom-4 right-4 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-semibold animate-pulse shadow-lg">
+          <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 bg-orange-500 text-white px-2 py-0.5 sm:px-2 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold animate-pulse shadow-lg">
             Almost Full!
           </div>
         )}
@@ -249,21 +249,21 @@ const EventCard = ({ event }: { event: Event }) => {
 
       {/* Enhanced content section */}
 
-      <div className="p-4 sm:p-6">
-        <h3 className="font-heading font-bold text-gray-900 group-hover:text-blue-600 transition-colors duration-300 line-clamp-2 mb-3 text-base sm:text-lg leading-tight">
+      <div className="p-3 sm:p-4 md:p-6">
+        <h3 className="font-heading font-bold text-gray-900 group-hover:text-blue-600 transition-colors duration-300 line-clamp-2 mb-2 sm:mb-3 text-sm sm:text-base md:text-lg leading-tight">
           {event.title}
         </h3>
 
         {/* Enhanced event details */}
 
-        <div className="space-y-3 mb-4">
-          <div className="flex items-center gap-3 text-sm text-gray-600">
-            <div className="p-2 bg-blue-50 rounded-lg">
-              <Calendar className="w-4 h-4 text-blue-600" />
+        <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
+          <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-600">
+            <div className="p-1.5 sm:p-2 bg-blue-50 rounded-lg">
+              <Calendar className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600" />
             </div>
 
-            <div>
-              <div className="font-medium">
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate">
                 {dateObj.toLocaleDateString("en-GB", {
                   weekday: "short",
                   day: "numeric",
@@ -272,33 +272,33 @@ const EventCard = ({ event }: { event: Event }) => {
                 })}
               </div>
 
-              <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
-                <Clock className="w-3 h-3" />
+              <div className="text-[10px] sm:text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
 
                 {event.time}
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 text-sm text-gray-600">
-            <div className="p-2 bg-green-50 rounded-lg">
-              <MapPin className="w-4 h-4 text-green-600" />
+          <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-600">
+            <div className="p-1.5 sm:p-2 bg-green-50 rounded-lg">
+              <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
             </div>
 
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="font-medium truncate">{event.venue}</div>
 
-              <div className="text-xs text-gray-500 mt-1">{event.campus}</div>
+              <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5">{event.campus}</div>
             </div>
           </div>
         </div>
 
         {/* Enhanced registration section */}
 
-        <div className="border-t pt-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2 text-sm">
-              <Users className="w-4 h-4 text-gray-500" />
+        <div className="border-t pt-3 sm:pt-4">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
+              <Users className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500" />
 
               <span className="font-medium text-gray-700">
                 {event.registrations} {isUnlimited ? "registered" : `/ ${event.capacity} registered`}
@@ -306,7 +306,7 @@ const EventCard = ({ event }: { event: Event }) => {
             </div>
 
             <span
-              className={`text-xs font-semibold px-2 py-1 rounded-full ${
+              className={`text-[10px] sm:text-xs font-semibold px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full ${
                 isUnlimited
                   ? "bg-blue-100 text-blue-700"
                   : isAlmostFull
@@ -323,15 +323,15 @@ const EventCard = ({ event }: { event: Event }) => {
           {!isUnlimited && (
             <Progress
               value={fillPercentage}
-              className="h-2 transition-all duration-500"
+              className="h-1.5 sm:h-2 transition-all duration-500"
             />
           )}
         </div>
 
         {/* Hover action hint */}
 
-        <div className="mt-4 text-center">
-          <span className="text-xs text-blue-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <div className="mt-3 sm:mt-4 text-center">
+          <span className="text-[10px] sm:text-xs text-blue-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300">
             Click for details →
           </span>
         </div>

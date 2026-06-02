@@ -277,6 +277,12 @@ function validateCSRFToken(req, res, next) {
 // Apply CSRF protection to all routes except auth
 app.use(validateCSRFToken);
 
+// CSRF token endpoint
+app.get("/api/csrf-token", (req, res) => {
+  const token = generateCSRFToken();
+  res.json({ token });
+});
+
 // Gzip compression – reduces JSON/text payloads by ~70%, critical for 100k+ users
 app.use(compression());
 
@@ -757,32 +763,10 @@ async function ensureDatabaseSchema() {
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS event_polls (
-      id         SERIAL PRIMARY KEY,
-      event_id   INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      question   TEXT NOT NULL,
-      options    JSONB NOT NULL DEFAULT '[]',
-      created_by INT REFERENCES admins(id) ON DELETE SET NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS event_poll_votes (
-      id           SERIAL PRIMARY KEY,
-      poll_id      INT NOT NULL REFERENCES event_polls(id) ON DELETE CASCADE,
-      student_id   INT NOT NULL REFERENCES student_registrations(id) ON DELETE CASCADE,
-      option_index INT NOT NULL,
-      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (poll_id, student_id)
-    )
-  `);
-  await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_reactions_event  ON event_reactions(event_id);
     CREATE INDEX IF NOT EXISTS idx_comments_event   ON event_comments(event_id);
     CREATE INDEX IF NOT EXISTS idx_waitlist_event   ON event_waitlist(event_id);
-    CREATE INDEX IF NOT EXISTS idx_gallery_event    ON event_gallery(event_id);
-    CREATE INDEX IF NOT EXISTS idx_polls_event      ON event_polls(event_id);
-    CREATE INDEX IF NOT EXISTS idx_poll_votes_poll  ON event_poll_votes(poll_id)
+    CREATE INDEX IF NOT EXISTS idx_gallery_event    ON event_gallery(event_id)
   `);
 
   // Add end_date to events if not present (multi-day event support)
@@ -1847,12 +1831,14 @@ app.post("/api/events/:id/register", authenticateToken, eventActionLimiter, asyn
     const eventDetails = eventDetailsRes.rows[0];
 
     // Emit Socket.io events for real-time updates
+    // Send notification to student
     emitToUser(studentId, "registration:success", {
       eventId: id,
       eventTitle: eventDetails?.title,
       registrationId: reg.id,
     });
 
+    // Send notification to club leader and admins
     emitToAdmins("event:new-registration", {
       eventId: id,
       eventTitle: eventDetails?.title,
@@ -3405,102 +3391,13 @@ app.post("/api/events/:id/gallery", requireAdmin, upload.single("image"), async 
   }
 });
 
-// ─── POLLS ────────────────────────────────────────────────────────────────────
-app.get("/api/events/:id/poll", async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) return res.status(400).json({ message: "Invalid event ID" });
-  try {
-    const { rows: polls } = await pool.query(
-      `SELECT * FROM event_polls WHERE event_id=$1 ORDER BY created_at DESC LIMIT 1`, [id]
-    );
-    if (polls.length === 0) return res.json(null);
-    const poll = polls[0];
-    const { rows: votes } = await pool.query(
-      `SELECT option_index, COUNT(*) as count FROM event_poll_votes WHERE poll_id=$1 GROUP BY option_index`,
-      [poll.id]
-    );
-    const voteCounts = {};
-    votes.forEach(v => { voteCounts[v.option_index] = parseInt(v.count); });
-    const totalVotes = votes.reduce((s, v) => s + parseInt(v.count), 0);
-    let userVote = null;
-    const token = req.headers.authorization?.split(" ")[1];
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.role === "user") {
-          const { rows: uv } = await pool.query(
-            `SELECT option_index FROM event_poll_votes WHERE poll_id=$1 AND student_id=$2`,
-            [poll.id, decoded.id]
-          );
-          if (uv.length > 0) userVote = uv[0].option_index;
-        }
-      } catch (_) {}
-    }
-    res.json({ ...poll, voteCounts, totalVotes, userVote });
-  } catch (err) {
-    console.error("Get poll error:", err);
-    res.status(500).json({ message: "Failed to get poll" });
-  }
-});
-
-app.post("/api/events/:id/poll", requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id);
-  const { question, options } = req.body;
-  if (!question || !Array.isArray(options) || options.length < 2)
-    return res.status(400).json({ message: "Question and at least 2 options required" });
-  const adminId = req.authUser?.id;
-  try {
-    await pool.query(`DELETE FROM event_polls WHERE event_id=$1`, [id]);
-    const { rows } = await pool.query(
-      `INSERT INTO event_polls (event_id, question, options, created_by) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [id, question, JSON.stringify(options), adminId]
-    );
-    emitToAll("event:poll-update", { eventId: id });
-    res.status(201).json(rows[0]);
-  } catch (err) {
-    console.error("Create poll error:", err);
-    res.status(500).json({ message: "Failed to create poll" });
-  }
-});
-
-app.post("/api/events/:id/poll/vote", authenticateToken, async (req, res) => {
-  const id = parseInt(req.params.id);
-  const { optionIndex } = req.body;
-  const studentId = req.authUser?.id;
-  if (!studentId || req.authUser?.role !== "user")
-    return res.status(403).json({ message: "Students only" });
-  try {
-    const { rows: polls } = await pool.query(
-      `SELECT id FROM event_polls WHERE event_id=$1 ORDER BY created_at DESC LIMIT 1`, [id]
-    );
-    if (polls.length === 0) return res.status(404).json({ message: "No poll found" });
-    const pollId = polls[0].id;
-    await pool.query(
-      `INSERT INTO event_poll_votes (poll_id, student_id, option_index) VALUES ($1,$2,$3)
-       ON CONFLICT (poll_id, student_id) DO UPDATE SET option_index=$3`,
-      [pollId, studentId, optionIndex]
-    );
-    const { rows: votes } = await pool.query(
-      `SELECT option_index, COUNT(*) as count FROM event_poll_votes WHERE poll_id=$1 GROUP BY option_index`,
-      [pollId]
-    );
-    const voteCounts = {};
-    votes.forEach(v => { voteCounts[v.option_index] = parseInt(v.count); });
-    const totalVotes = votes.reduce((s, v) => s + parseInt(v.count), 0);
-    emitToAll("event:poll-update", { eventId: id, voteCounts, totalVotes });
-    res.json({ voteCounts, totalVotes, userVote: optionIndex });
-  } catch (err) {
-    console.error("Vote poll error:", err);
-    res.status(500).json({ message: "Failed to vote" });
-  }
-});
-
+// ─── SERVER START ────────────────────────────────────────────────────────────────────
 async function startServer() {
   try {
     await testConnection();
     await ensureDatabaseSchema();
     await seedDefaultAdmin();
-    console.log("Database: connected ✓");
+    console.log("Database: postgresql connected ✓");
   } catch (error) {
     console.error("Database connection failed:", error.message);
     process.exit(1);

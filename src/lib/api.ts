@@ -11,6 +11,29 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
+let csrfTokenPromise: Promise<string> | null = null;
+
+async function getCsrfToken(): Promise<string> {
+  if (!csrfTokenPromise) {
+    csrfTokenPromise = fetch(`${API_BASE_URL}/csrf-token`)
+      .then(handleResponse)
+      .then((data) => data.token)
+      .catch((error) => {
+        csrfTokenPromise = null;
+        throw error;
+      });
+  }
+  return csrfTokenPromise;
+}
+
+async function csrfHeaders(extraHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
+  return {
+    ...authHeaders(),
+    ...extraHeaders,
+    "X-CSRF-Token": await getCsrfToken(),
+  };
+}
+
 async function handleResponse(res: Response) {
   const data = await res.json();
   if (!res.ok) {
@@ -75,37 +98,37 @@ export const api = {
         headers: { "Content-Type": "application/json" },
       }).then(handleResponse),
 
-    create: (data: any) =>
+    create: async (data: any) =>
       fetch(`${API_BASE_URL}/events`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(data),
       }).then(handleResponse),
 
-    update: (id: string, data: any) =>
+    update: async (id: string, data: any) =>
       fetch(`${API_BASE_URL}/events/${id}`, {
         method: "PUT",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(data),
       }).then(handleResponse),
 
-    delete: (id: string) =>
+    delete: async (id: string) =>
       fetch(`${API_BASE_URL}/events/${id}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
       }).then(handleResponse),
 
-    register: (eventId: string, _studentId?: string | number) =>
+    register: async (eventId: string, _studentId?: string | number) =>
       fetch(`${API_BASE_URL}/events/${eventId}/register`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({}),
       }).then(handleResponse),
 
-    cancelRegistration: (eventId: string, studentId: string | number) =>
+    cancelRegistration: async (eventId: string, studentId: string | number) =>
       fetch(`${API_BASE_URL}/events/${eventId}/register/${studentId}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
       }).then(handleResponse),
   },
 
@@ -132,16 +155,16 @@ export const api = {
         headers: authHeaders(),
       }).then(handleResponse),
 
-    approveEvent: (id: string | number) =>
+    approveEvent: async (id: string | number) =>
       fetch(`${API_BASE_URL}/admin/events/${id}/approve`, {
         method: "PATCH",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
       }).then(handleResponse),
 
-    rejectEvent: (id: string | number) =>
+    rejectEvent: async (id: string | number) =>
       fetch(`${API_BASE_URL}/admin/events/${id}/reject`, {
         method: "PATCH",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
       }).then(handleResponse),
 
     getEventRegistrations: (eventId: string) =>
@@ -160,20 +183,20 @@ export const api = {
       }).then(handleResponse);
     },
 
-    updateStudentStatus: (studentId: string | number, status: "active" | "deleted") =>
+    updateStudentStatus: async (studentId: string | number, status: "active" | "deleted") =>
       fetch(`${API_BASE_URL}/admin/students/${studentId}/status`, {
         method: "PATCH",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ status }),
       }).then(handleResponse),
 
-    deleteStudent: (studentId: string) =>
+    deleteStudent: async (studentId: string) =>
       fetch(`${API_BASE_URL}/admin/students/${studentId}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
       }).then(handleResponse),
 
-    updateAccount: (data: {
+    updateAccount: async (data: {
       currentPassword: string;
       newEmail?: string;
       newPassword?: string;
@@ -181,7 +204,7 @@ export const api = {
     }) =>
       fetch(`${API_BASE_URL}/admin/account`, {
         method: "PUT",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(data),
       }).then(handleResponse),
 
@@ -219,7 +242,7 @@ export const api = {
         headers: authHeaders(),
       }).then(handleResponse),
 
-    createClubLeader: (data: {
+    createClubLeader: async (data: {
       email: string;
       password: string;
       name: string;
@@ -227,14 +250,14 @@ export const api = {
     }) =>
       fetch(`${API_BASE_URL}/admin/club-leaders`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(data),
       }).then(handleResponse),
 
-    deleteClubLeader: (id: string | number) =>
+    deleteClubLeader: async (id: string | number) =>
       fetch(`${API_BASE_URL}/admin/club-leaders/${id}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
       }).then(handleResponse),
 
     // System settings
@@ -243,10 +266,10 @@ export const api = {
         headers: authHeaders(),
       }).then(handleResponse),
 
-    updateSettings: (settings: Record<string, string>) =>
+    updateSettings: async (settings: Record<string, string>) =>
       fetch(`${API_BASE_URL}/admin/settings`, {
         method: "PUT",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(settings),
       }).then(handleResponse),
 
@@ -256,58 +279,58 @@ export const api = {
         headers: authHeaders(),
       }).then(handleResponse),
 
-    createCategory: (name: string) =>
+    createCategory: async (name: string) =>
       fetch(`${API_BASE_URL}/admin/categories`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ name }),
       }).then(handleResponse),
 
-    updateCategory: (id: number, name: string) =>
+    updateCategory: async (id: number, name: string) =>
       fetch(`${API_BASE_URL}/admin/categories/${id}`, {
         method: "PUT",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ name }),
       }).then(handleResponse),
 
-    deleteCategory: (id: number) =>
+    deleteCategory: async (id: number) =>
       fetch(`${API_BASE_URL}/admin/categories/${id}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
       }).then(handleResponse),
 
-    addSubcategory: (categoryId: number, name: string) =>
+    addSubcategory: async (categoryId: number, name: string) =>
       fetch(`${API_BASE_URL}/admin/categories/${categoryId}/subcategories`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ name }),
       }).then(handleResponse),
 
-    updateSubcategory: (id: number, name: string) =>
+    updateSubcategory: async (id: number, name: string) =>
       fetch(`${API_BASE_URL}/admin/subcategories/${id}`, {
         method: "PUT",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ name }),
       }).then(handleResponse),
 
-    deleteSubcategory: (id: number) =>
+    deleteSubcategory: async (id: number) =>
       fetch(`${API_BASE_URL}/admin/subcategories/${id}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
       }).then(handleResponse),
 
     // SMS
-    sendSMS: (data: { message: string; targetGroup?: string; recipients?: string[] }) =>
+    sendSMS: async (data: { message: string; targetGroup?: string; recipients?: string[] }) =>
       fetch(`${API_BASE_URL}/admin/sms/send`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(data),
       }).then(handleResponse),
 
-    sendEventSMS: (eventId: string | number, message: string) =>
+    sendEventSMS: async (eventId: string | number, message: string) =>
       fetch(`${API_BASE_URL}/admin/sms/event/${eventId}`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ message }),
       }).then(handleResponse),
 
@@ -316,10 +339,10 @@ export const api = {
         headers: authHeaders(),
       }).then(handleResponse),
 
-    updateProfile: (data: { name: string }) =>
+    updateProfile: async (data: { name: string }) =>
       fetch(`${API_BASE_URL}/admin/profile`, {
         method: "PUT",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(data),
       }).then(handleResponse),
 
@@ -362,6 +385,7 @@ export const api = {
     },
   },
 
+  // **CLUB LEADERS** //
   clubLeader: {
     getDashboard: () =>
       fetch(`${API_BASE_URL}/club-leader/dashboard`, {
@@ -373,25 +397,25 @@ export const api = {
         headers: authHeaders(),
       }).then(handleResponse),
 
-    updateAccount: (data: {
+    updateAccount: async (data: {
       currentPassword: string;
       newPassword: string;
       confirmNewPassword: string;
     }) =>
       fetch(`${API_BASE_URL}/club-leader/account`, {
         method: "PUT",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(data),
       }).then(handleResponse),
   },
 
   upload: {
-    image: (file: File) => {
+    image: async (file: File) => {
       const formData = new FormData();
       formData.append("image", file);
       return fetch(`${API_BASE_URL}/upload`, {
         method: "POST",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
         body: formData,
       }).then(handleResponse);
     },
@@ -404,10 +428,10 @@ export const api = {
       fetch(`${API_BASE_URL}/events/${eventId}/reactions`, {
         headers: authHeaders(),
       }).then(handleResponse),
-    react: (eventId: string | number, type: "fire" | "heart" | "wow") =>
+    react: async (eventId: string | number, type: "fire" | "heart" | "wow") =>
       fetch(`${API_BASE_URL}/events/${eventId}/react`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ type }),
       }).then(handleResponse),
   },
@@ -415,16 +439,16 @@ export const api = {
   comments: {
     get: (eventId: string | number) =>
       fetch(`${API_BASE_URL}/events/${eventId}/comments`).then(handleResponse),
-    post: (eventId: string | number, content: string) =>
+    post: async (eventId: string | number, content: string) =>
       fetch(`${API_BASE_URL}/events/${eventId}/comments`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ content }),
       }).then(handleResponse),
-    delete: (eventId: string | number, commentId: number) =>
+    delete: async (eventId: string | number, commentId: number) =>
       fetch(`${API_BASE_URL}/events/${eventId}/comments/${commentId}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
       }).then(handleResponse),
   },
 
@@ -438,50 +462,32 @@ export const api = {
       fetch(`${API_BASE_URL}/events/${eventId}/waitlist/status`, {
         headers: authHeaders(),
       }).then(handleResponse),
-    join: (eventId: string | number) =>
+    join: async (eventId: string | number) =>
       fetch(`${API_BASE_URL}/events/${eventId}/waitlist`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({}),
       }).then(handleResponse),
-    leave: (eventId: string | number) =>
+    leave: async (eventId: string | number) =>
       fetch(`${API_BASE_URL}/events/${eventId}/waitlist`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
       }).then(handleResponse),
   },
 
   gallery: {
     get: (eventId: string | number) =>
       fetch(`${API_BASE_URL}/events/${eventId}/gallery`).then(handleResponse),
-    upload: (eventId: string | number, file: File, caption?: string) => {
+    upload: async (eventId: string | number, file: File, caption?: string) => {
       const formData = new FormData();
       formData.append("image", file);
       if (caption) formData.append("caption", caption);
       return fetch(`${API_BASE_URL}/events/${eventId}/gallery`, {
         method: "POST",
-        headers: authHeaders(),
+        headers: await csrfHeaders(),
         body: formData,
       }).then(handleResponse);
     },
   },
 
-  polls: {
-    get: (eventId: string | number) =>
-      fetch(`${API_BASE_URL}/events/${eventId}/poll`, {
-        headers: authHeaders(),
-      }).then(handleResponse),
-    create: (eventId: string | number, question: string, options: string[]) =>
-      fetch(`${API_BASE_URL}/events/${eventId}/poll`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ question, options }),
-      }).then(handleResponse),
-    vote: (eventId: string | number, optionIndex: number) =>
-      fetch(`${API_BASE_URL}/events/${eventId}/poll/vote`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ optionIndex }),
-      }).then(handleResponse),
-  },
 };

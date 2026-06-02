@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, Bell, User, LogOut, LogIn, Mail, Phone, ChevronDown, CheckCheck, CalendarDays, UserCheck, ThumbsUp, ThumbsDown, Users } from "lucide-react";
+import { Menu, X, Bell, User, LogOut, LogIn, Mail, Phone, ChevronDown, CheckCheck, UserCheck, ThumbsUp, ThumbsDown, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useSocket, Notification } from "@/contexts/SocketContext";
@@ -21,24 +21,42 @@ function timeAgo(timestamp: string): string {
 
 function notifIcon(type: Notification["type"]) {
   switch (type) {
-    case "event:approved": return <CalendarDays className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />;
     case "registration:success": return <UserCheck className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />;
     case "event:your-event-approved": return <ThumbsUp className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />;
     case "event:your-event-rejected": return <ThumbsDown className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />;
     case "event:new-registration": return <Users className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />;
+    case "event:posted": return <Bell className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />;
   }
 }
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [eventsDropdownOpen, setEventsDropdownOpen] = useState(false);
+  const [mobileEventsDropdownOpen, setMobileEventsDropdownOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [mobileNotifOpen, setMobileNotifOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { notifications, unreadCount, markAllRead, clearNotification } = useSocket();
+
+  // Filter notifications based on user role
+  const filteredNotifications = notifications.filter((notif) => {
+    if (user?.role === "user") {
+      // Students: Only see event:posted notifications
+      return notif.type === "event:posted";
+    } else if (user?.role === "club_leader") {
+      // Club leaders: Only see event:your-event-approved and event:your-event-rejected
+      return notif.type === "event:your-event-approved" || notif.type === "event:your-event-rejected";
+    }
+    // Admins: See all notifications
+    return true;
+  });
+
+  const filteredUnreadCount = filteredNotifications.filter((n) => !n.read).length;
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -50,13 +68,27 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleBellClick = () => {
-    setNotifOpen((prev) => !prev);
+    if (isMobile) {
+      setMobileNotifOpen((prev) => !prev);
+      setNotifOpen(false);
+    } else {
+      setNotifOpen((prev) => !prev);
+      setMobileNotifOpen(false);
+    }
   };
 
   const handleNotifClick = (notif: Notification) => {
     clearNotification(notif.id);
     setNotifOpen(false);
+    setMobileNotifOpen(false);
     if (notif.eventId) navigate(`/events/${notif.eventId}`);
   };
 
@@ -107,12 +139,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       {/* Main Header - Hidden on Auth Page */}
       {location.pathname !== "/auth" && (
         <header className="sticky top-0 z-50 bg-card border-b shadow-sm">
-          <div className="container flex items-center justify-between h-16 md:h-24 px-4 md:px-0">
+          <div className="container flex items-center justify-between h-14 md:h-20 px-4 md:px-0">
             <Link to="/" className="flex items-center gap-3 ml-4 md:ml-8">
               <img
                 src={zetechLogo}
                 alt="Zetech University Logo"
-                className="h-12 md:h-20 w-auto object-contain"
+                className="h-10 md:h-16 w-auto object-contain"
               />
             </Link>
 
@@ -150,7 +182,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
                   {link.hasDropdown && (
                     <div
-                      className={`absolute top-full left-0 mt-1 w-56 bg-gray-700 border border-gray-600 rounded-lg shadow-xl z-50 max-h-80 overflow-y-auto transition-all duration-300 ease-in-out transform origin-top ${
+                      className={`absolute top-full left-0 mt-1 w-56 bg-gray-500 border border-gray-600 rounded-lg shadow-xl z-50 max-h-80 overflow-y-auto transition-all duration-300 ease-in-out transform origin-top ${
                         eventsDropdownOpen
                           ? "opacity-100 scale-100 translate-y-0 visible"
                           : "opacity-0 scale-95 -translate-y-2 invisible pointer-events-none"
@@ -163,7 +195,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                           <Link
                             key={item.path}
                             to={item.path}
-                            className={`block px-4 py-3 text-sm text-white hover:bg-gray-600 transition-all duration-200 cursor-pointer border-l-4 border-transparent hover:border-white transform ${
+                            className={`block px-4 py-3 text-sm text-white hover:bg-black transition-all duration-200 cursor-pointer border-l-4 border-transparent hover:border-white transform ${
                               eventsDropdownOpen
                                 ? "translate-x-0 opacity-100"
                                 : "-translate-x-2 opacity-0"
@@ -186,7 +218,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <div className="flex items-center gap-2">
               {user ? (
                 <>
-                  {/* Notification Bell */}
+                  {/* Notification Bell - Visible on both desktop and mobile */}
                   <div className="relative" ref={notifRef}>
                     <Button
                       variant="ghost"
@@ -196,20 +228,20 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                       aria-label="Notifications"
                     >
                       <Bell className="w-5 h-5" />
-                      {unreadCount > 0 && (
+                      {filteredUnreadCount > 0 && (
                         <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
-                          {unreadCount > 9 ? "9+" : unreadCount}
+                          {filteredUnreadCount > 9 ? "9+" : filteredUnreadCount}
                         </span>
                       )}
                     </Button>
 
-                    {/* Notification Dropdown */}
+                    {/* Notification Dropdown - Desktop */}
                     {notifOpen && (
-                      <div className="absolute right-0 top-full mt-2 w-80 bg-card border rounded-xl shadow-2xl z-50 overflow-hidden">
+                      <div className="absolute right-0 top-full mt-2 w-80 bg-card border rounded-xl shadow-2xl z-50 overflow-hidden hidden md:block">
                         {/* Header */}
                         <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
                           <span className="font-semibold text-sm">Notifications</span>
-                          {unreadCount > 0 && (
+                          {filteredUnreadCount > 0 && (
                             <button
                               onClick={markAllRead}
                               className="flex items-center gap-1 text-xs text-primary hover:underline"
@@ -222,13 +254,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
                         {/* List */}
                         <div className="max-h-80 overflow-y-auto divide-y">
-                          {notifications.length === 0 ? (
+                          {filteredNotifications.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
                               <Bell className="w-7 h-7 opacity-30" />
                               <span className="text-sm">No notifications yet</span>
                             </div>
                           ) : (
-                            notifications.map((notif) => (
+                            filteredNotifications.map((notif) => (
                               <div
                                 key={notif.id}
                                 onClick={() => handleNotifClick(notif)}
@@ -270,16 +302,19 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                     )}
                   </div>
 
+                  {/* User Profile Button - Visible on both desktop and mobile */}
                   <Button variant="ghost" size="icon" className="relative" onClick={() => navigate("/profile")}>
                     <User className="w-5 h-5" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign Out">
+                  {/* Sign Out Button - Hidden on mobile, visible in mobile menu */}
+                  <Button variant="ghost" size="icon" className="hidden md:block" onClick={handleSignOut} title="Sign Out">
                     <LogOut className="w-5 h-5" />
                   </Button>
                 </>
               ) : (
                 <>
-                  <Button variant="ghost" size="sm" asChild className="hidden md:flex">
+                  {/* Sign In Button - Hidden on mobile, visible in mobile menu */}
+                  <Button variant="ghost" size="sm" asChild className="hidden md:flex mr-2">
                     <Link to="/auth">
                       <LogIn className="w-4 h-4 mr-1" /> Sign In
                     </Link>
@@ -304,21 +339,31 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <div key={link.path}>
                   {link.hasDropdown ? (
                     <div>
-                      <div className="block w-full px-4 py-4 rounded-md text-sm font-medium transition-colors text-foreground hover:bg-muted min-h-[48px]">
+                      <button
+                        onClick={() => setMobileEventsDropdownOpen(!mobileEventsDropdownOpen)}
+                        className="w-full flex items-center justify-between px-4 py-4 rounded-md text-sm font-medium transition-colors text-foreground hover:bg-muted min-h-[48px]"
+                      >
                         {link.label}
-                      </div>
-                      <div className="ml-4 space-y-1">
-                        {eventsDropdownItems.map((item) => (
-                          <Link
-                            key={item.path}
-                            to={item.path}
-                            onClick={() => setMobileOpen(false)}
-                            className="block w-full px-4 py-3 rounded-md text-sm font-medium transition-colors text-foreground hover:bg-muted min-h-[48px]"
-                          >
-                            {item.label}
-                          </Link>
-                        ))}
-                      </div>
+                        <ChevronDown
+                          className={`w-4 h-4 transition-transform duration-300 ${
+                            mobileEventsDropdownOpen ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+                      {mobileEventsDropdownOpen && (
+                        <div className="ml-4 space-y-1">
+                          {eventsDropdownItems.map((item) => (
+                            <Link
+                              key={item.path}
+                              to={item.path}
+                              onClick={() => setMobileOpen(false)}
+                              className="block w-full px-4 py-3 rounded-md text-sm font-medium transition-colors text-foreground hover:bg-muted min-h-[48px]"
+                            >
+                              {item.label}
+                            </Link>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <Link
@@ -340,16 +385,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-full justify-start gap-2 relative min-h-[48px]"
-                    onClick={() => { setNotifOpen(true); setMobileOpen(false); }}
+                    className="w-full justify-start gap-2 min-h-[48px]"
+                    onClick={() => { handleSignOut(); setMobileOpen(false); }}
                   >
-                    <Bell className="w-4 h-4" />
-                    Notifications
-                    {unreadCount > 0 && (
-                      <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                        {unreadCount > 9 ? "9+" : unreadCount}
-                      </span>
-                    )}
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
                   </Button>
                 </div>
               ) : (
@@ -363,6 +403,70 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               )}
             </nav>
           )}
+
+          {/* Mobile Notification Panel */}
+          {mobileNotifOpen && (
+            <nav className="md:hidden border-t bg-card px-4 py-4">
+              <div className="flex items-center justify-between mb-4">
+                <span className="font-semibold text-lg">Notifications</span>
+                {filteredUnreadCount > 0 && (
+                  <button
+                    onClick={markAllRead}
+                    className="flex items-center gap-1 text-sm text-primary hover:underline"
+                  >
+                    <CheckCheck className="w-4 h-4" />
+                    Mark all read
+                  </button>
+                )}
+              </div>
+
+              {filteredNotifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
+                  <Bell className="w-12 h-12 opacity-30" />
+                  <span className="text-base">No notifications yet</span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredNotifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      onClick={() => handleNotifClick(notif)}
+                      className={`flex items-start gap-3 px-4 py-4 rounded-lg cursor-pointer transition-colors hover:bg-muted/60 min-h-[72px] ${
+                        !notif.read ? "bg-primary/5" : ""
+                      }`}
+                    >
+                      {notifIcon(notif.type)}
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-semibold truncate ${!notif.read ? "text-foreground" : "text-muted-foreground"}`}>
+                          {notif.title}
+                        </p>
+                        <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+                          {notif.message}
+                        </p>
+                        <p className="text-xs text-muted-foreground/70 mt-2">
+                          {timeAgo(notif.timestamp)}
+                        </p>
+                      </div>
+                      {!notif.read && (
+                        <span className="w-3 h-3 rounded-full bg-primary shrink-0 mt-1" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {notifications.length > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <button
+                    onClick={() => { markAllRead(); setMobileNotifOpen(false); }}
+                    className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+                  >
+                    Clear all
+                  </button>
+                </div>
+              )}
+            </nav>
+          )}
         </header>
       )}
 
@@ -371,8 +475,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       {/* Footer - Hidden on Auth Page */}
       {location.pathname !== "/auth" && (
         <footer className="hero-gradient text-primary-foreground">
-          <div className="container py-10">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="px-4 md:px-8 py-10">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-7xl mx-auto">
               <div>
                 <h3 className="font-heading font-bold text-lg mb-3">Zetech Events Portal</h3>
                 <p className="text-sm opacity-80">
@@ -400,7 +504,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </ul>
               </div>
             </div>
-            <div className="mt-8 pt-6 border-t border-primary-foreground/20 text-center text-sm opacity-60">
+          </div>
+          <div className="mt-8 pt-6 pb-6 border-t border-primary-foreground/20 text-center text-xs text-gray-300 bg-red-800">
+            <div className="px-4 md:px-8">
               Copyright &copy; 2026 Zetech University | Inventing your Future. All rights reserved.
             </div>
           </div>

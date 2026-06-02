@@ -3,7 +3,7 @@ import { io, Socket } from "socket.io-client";
 
 export interface Notification {
   id: string;
-  type: "event:approved" | "registration:success" | "event:your-event-approved" | "event:your-event-rejected" | "event:new-registration";
+  type: "registration:success" | "event:your-event-approved" | "event:your-event-rejected" | "event:new-registration" | "event:posted";
   title: string;
   message: string;
   eventId?: number;
@@ -74,16 +74,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.error("Socket connection error:", error);
     });
 
-    socketInstance.on("event:approved", (data: { eventId: number; eventTitle: string; timestamp: string }) => {
-      addNotification({
-        type: "event:approved",
-        title: "New Event Published",
-        message: data.eventTitle,
-        eventId: data.eventId,
-        timestamp: data.timestamp || new Date().toISOString(),
-      });
-    });
-
     socketInstance.on("registration:success", (data: { eventId: number; eventTitle: string }) => {
       addNotification({
         type: "registration:success",
@@ -121,6 +111,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         message: data.studentName
           ? `${data.studentName} registered for "${data.eventTitle}"`
           : `New registration for "${data.eventTitle}"`,
+        eventId: data.eventId,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    socketInstance.on("event:approved", (data: { eventId: number; eventTitle: string }) => {
+      addNotification({
+        type: "event:posted",
+        title: "New Event Posted",
+        message: `"${data.eventTitle}" is now available`,
         eventId: data.eventId,
         timestamp: new Date().toISOString(),
       });

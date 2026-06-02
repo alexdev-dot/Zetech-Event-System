@@ -369,8 +369,6 @@ The application uses Supabase (PostgreSQL) via REST API/RPC instead of direct TC
 - `admins` - Admin and club leader accounts
 - `events` - Event information
 - `event_registrations` - Student event registrations
-- `event_polls` - Event polls
-- `event_poll_votes` - Poll votes
 
 ### Database Setup
 
@@ -432,9 +430,6 @@ The application uses Socket.io for real-time updates. For detailed Socket.io doc
 - `event:approved` - Sent to all connected clients
 - `event:your-event-approved` - Sent to the event creator
 - `event:rejected` - Sent to the event creator
-
-#### Polls
-- `event:poll-update` - Sent when poll is created or voted on
 
 ## 🎨 Customization
 
@@ -621,7 +616,6 @@ If you encounter any issues or have questions:
 - [x] Responsive design with Tailwind CSS
 - [x] Social media integration (WhatsApp sharing)
 - [x] File upload support for event images
-- [x] Event polls and voting
 - [x] Analytics dashboard with charts
 - [x] Calendar views (day, week, month)
 - [x] SMS notifications (Africa's Talking)

@@ -225,4 +225,31 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  /* Mobile toast viewport explicit positioning */
+  @media (max-width: 767px) {
+    [data-radix-toast-viewport] {
+      position: fixed !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      height: 50vh !important;
+      width: 90% !important;
+      max-width: 90% !important;
+      bottom: auto !important;
+      right: auto !important;
+      padding: 1rem !important;
+      max-height: 50vh !important;
+    }
+
+    /* Override Radix toast positioning on mobile */
+    [data-radix-toast] {
+      position: relative !important;
+      top: auto !important;
+      left: auto !important;
+      right: auto !important;
+      bottom: auto !important;
+      transform: none !important;
+    }
+  }
 }

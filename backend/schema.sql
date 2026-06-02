@@ -125,25 +125,6 @@ CREATE TABLE IF NOT EXISTS event_gallery (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Event polls table
-CREATE TABLE IF NOT EXISTS event_polls (
-  id         SERIAL PRIMARY KEY,
-  event_id   INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  question   TEXT NOT NULL,
-  options    JSONB NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Event poll votes table
-CREATE TABLE IF NOT EXISTS event_poll_votes (
-  id           SERIAL PRIMARY KEY,
-  poll_id      INT NOT NULL REFERENCES event_polls(id) ON DELETE CASCADE,
-  student_id   INT NOT NULL REFERENCES student_registrations(id) ON DELETE CASCADE,
-  option_index INT NOT NULL,
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (poll_id, student_id)
-);
-
 -- Security audit logs table
 CREATE TABLE IF NOT EXISTS security_audit_logs (
   id          SERIAL PRIMARY KEY,
@@ -175,8 +156,6 @@ CREATE INDEX IF NOT EXISTS idx_reactions_event         ON event_reactions(event_
 CREATE INDEX IF NOT EXISTS idx_comments_event          ON event_comments(event_id);
 CREATE INDEX IF NOT EXISTS idx_waitlist_event          ON event_waitlist(event_id);
 CREATE INDEX IF NOT EXISTS idx_gallery_event           ON event_gallery(event_id);
-CREATE INDEX IF NOT EXISTS idx_polls_event             ON event_polls(event_id);
-CREATE INDEX IF NOT EXISTS idx_poll_votes_poll         ON event_poll_votes(poll_id);
 CREATE INDEX IF NOT EXISTS idx_audit_event_type        ON security_audit_logs(event_type);
 CREATE INDEX IF NOT EXISTS idx_audit_actor_id          ON security_audit_logs(actor_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created_at        ON security_audit_logs(created_at DESC);
@@ -207,8 +186,6 @@ ALTER TABLE event_reactions       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE event_comments        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE event_waitlist        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE event_gallery         ENABLE ROW LEVEL SECURITY;
-ALTER TABLE event_polls           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE event_poll_votes      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE security_audit_logs   ENABLE ROW LEVEL SECURITY;
 
 -- ─── 5. CREATE RLS POLICIES ───────────────────────────────────
@@ -275,18 +252,6 @@ CREATE POLICY "Service role can do anything" ON event_waitlist
   WITH CHECK (true);
 
 CREATE POLICY "Service role can do anything" ON event_gallery
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Service role can do anything" ON event_polls
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Service role can do anything" ON event_poll_votes
   FOR ALL
   TO service_role
   USING (true)
@@ -408,24 +373,6 @@ CREATE POLICY "Students can join waitlist" ON event_waitlist
     EXISTS (
       SELECT 1 FROM student_registrations
       WHERE id = event_waitlist.student_id
-      AND email = auth.uid()::text
-    )
-  );
-
-CREATE POLICY "Students can vote in polls" ON event_poll_votes
-  FOR ALL
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM student_registrations
-      WHERE id = event_poll_votes.student_id
-      AND email = auth.uid()::text
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM student_registrations
-      WHERE id = event_poll_votes.student_id
       AND email = auth.uid()::text
     )
   );
