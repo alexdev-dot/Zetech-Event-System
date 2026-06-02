@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useSocketNotifications } from "@/hooks/useSocketNotifications";
+import { useSocket, Notification } from "@/contexts/SocketContext";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,7 +17,8 @@ import {
   Calendar, MapPin, Clock, Users, Plus, LogOut, RefreshCw,
   TrendingUp, CheckCircle, AlertCircle, XCircle, Trash2, Lock, Eye, EyeOff, Menu, X,
   LayoutDashboard, FileText, User as UserIcon, Settings as SettingsIcon, Download, ChevronRight,
-  BarChart3, Mail, Bell, History, Edit, Copy, Upload, ImageIcon, CalendarDays
+  BarChart3, Mail, Bell, History, Edit, Copy, Upload, ImageIcon, CalendarDays, CheckCheck,
+  UserCheck, ThumbsUp, ThumbsDown
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import zetechLogo from "@/assets/zetech-logo.png";
@@ -55,15 +57,37 @@ function fmtDate(d: string) {
   try { return format(new Date(d), "MMM d, yyyy"); } catch { return d; }
 }
 
+function timeAgo(timestamp: string): string {
+  const diff = Date.now() - new Date(timestamp).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function notifIcon(type: Notification["type"]) {
+  switch (type) {
+    case "registration:success": return <UserCheck className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />;
+    case "event:your-event-approved": return <ThumbsUp className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />;
+    case "event:your-event-rejected": return <ThumbsDown className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />;
+    case "event:new-registration": return <Users className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />;
+  }
+}
+
 const ClubLeaderDashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { notifications: socketNotifications, unreadCount, markAllRead, clearNotification } = useSocket();
 
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeView, setActiveView] = useState("dashboard");
   const [pendingCount, setPendingCount] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
 
   // Event management
   const [showCreateEvent, setShowCreateEvent] = useState(false);
@@ -90,7 +114,7 @@ const ClubLeaderDashboard = () => {
   });
 
   // Notification settings
-  const [notifications, setNotifications] = useState({
+  const [notificationSettings, setNotificationSettings] = useState({
     emailReminders: true,
     emailApprovals: true,
     browserNotifications: true
@@ -144,6 +168,26 @@ const ClubLeaderDashboard = () => {
   useEffect(() => { loadDashboard(); }, []);
 
   useSocketNotifications(user?.id, user?.role, dashboardData?.club || user?.club || undefined);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleBellClick = () => {
+    setNotifOpen((prev) => !prev);
+  };
+
+  const handleNotifClick = (notif: Notification) => {
+    clearNotification(notif.id);
+    setNotifOpen(false);
+    if (notif.eventId) navigate(`/events/${notif.eventId}`);
+  };
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -512,6 +556,98 @@ const ClubLeaderDashboard = () => {
         </button>
       </aside>
 
+      {/* Desktop Header */}
+      <header className="hidden md:flex bg-white border-b border-gray-200 fixed top-0 left-0 right-0 z-20 h-16 items-center justify-end px-6" style={{ marginLeft: sidebarOpen ? '16rem' : '5rem' }}>
+        <div className="flex items-center gap-2">
+          {/* Notification Bell */}
+          <div className="relative" ref={notifRef}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative h-9 w-9"
+              onClick={handleBellClick}
+              aria-label="Notifications"
+            >
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </Button>
+
+            {/* Notification Dropdown */}
+            {notifOpen && (
+              <div className="absolute right-0 top-full mt-2 w-80 bg-card border rounded-xl shadow-2xl z-50 overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
+                  <span className="font-semibold text-sm">Notifications</span>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markAllRead}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <CheckCheck className="w-3 h-3" />
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+
+                {/* List */}
+                <div className="max-h-80 overflow-y-auto divide-y">
+                  {socketNotifications.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
+                      <Bell className="w-7 h-7 opacity-30" />
+                      <span className="text-sm">No notifications yet</span>
+                    </div>
+                  ) : (
+                    socketNotifications.map((notif) => (
+                      <div
+                        key={notif.id}
+                        onClick={() => handleNotifClick(notif)}
+                        className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/60 ${
+                          !notif.read ? "bg-primary/5" : ""
+                        }`}
+                      >
+                        {notifIcon(notif.type)}
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs font-semibold truncate ${!notif.read ? "text-foreground" : "text-muted-foreground"}`}>
+                            {notif.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                            {notif.message}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/70 mt-1">
+                            {timeAgo(notif.timestamp)}
+                          </p>
+                        </div>
+                        {!notif.read && (
+                          <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1" />
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {socketNotifications.length > 0 && (
+                  <div className="px-4 py-2 border-t bg-muted/30 text-center">
+                    <button
+                      onClick={() => { markAllRead(); setNotifOpen(false); }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <Button variant="ghost" size="icon" className="text-red-600" onClick={() => { signOut(); navigate("/auth"); }}>
+            <LogOut className="w-5 h-5" />
+          </Button>
+        </div>
+      </header>
+
       {/* Mobile Header */}
       <header className="md:hidden bg-white border-b border-gray-200 fixed top-0 left-0 right-0 z-20 w-full">
         <div className="px-3 h-14 flex items-center justify-between">
@@ -524,9 +660,94 @@ const ClubLeaderDashboard = () => {
               <p className="font-semibold text-gray-800 text-sm leading-tight">Club Leader</p>
             </div>
           </div>
-          <Button variant="ghost" size="icon" className="text-red-600 h-9 w-9" onClick={() => { signOut(); navigate("/auth"); }}>
-            <LogOut className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {/* Notification Bell */}
+            <div className="relative" ref={notifRef}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative h-9 w-9"
+                onClick={handleBellClick}
+                aria-label="Notifications"
+              >
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </Button>
+
+              {/* Notification Dropdown */}
+              {notifOpen && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-card border rounded-xl shadow-2xl z-50 overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
+                    <span className="font-semibold text-sm">Notifications</span>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={markAllRead}
+                        className="flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        <CheckCheck className="w-3 h-3" />
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  {/* List */}
+                  <div className="max-h-80 overflow-y-auto divide-y">
+                    {socketNotifications.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
+                        <Bell className="w-7 h-7 opacity-30" />
+                        <span className="text-sm">No notifications yet</span>
+                      </div>
+                    ) : (
+                      socketNotifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          onClick={() => handleNotifClick(notif)}
+                          className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/60 ${
+                            !notif.read ? "bg-primary/5" : ""
+                          }`}
+                        >
+                          {notifIcon(notif.type)}
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs font-semibold truncate ${!notif.read ? "text-foreground" : "text-muted-foreground"}`}>
+                              {notif.title}
+                            </p>
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                              {notif.message}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground/70 mt-1">
+                              {timeAgo(notif.timestamp)}
+                            </p>
+                          </div>
+                          {!notif.read && (
+                            <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1" />
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {socketNotifications.length > 0 && (
+                    <div className="px-4 py-2 border-t bg-muted/30 text-center">
+                      <button
+                        onClick={() => { markAllRead(); setNotifOpen(false); }}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <Button variant="ghost" size="icon" className="text-red-600 h-9 w-9" onClick={() => { signOut(); navigate("/auth"); }}>
+              <LogOut className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -581,7 +802,7 @@ const ClubLeaderDashboard = () => {
       )}
 
       {/* Main Content */}
-      <main className={`pt-14 md:pt-0 overflow-x-hidden overflow-y-auto min-h-screen transition-all duration-300 ${sidebarOpen ? 'md:ml-64' : 'md:ml-20'}`}>
+      <main className={`pt-14 md:pt-16 overflow-x-hidden overflow-y-auto min-h-screen transition-all duration-300 ${sidebarOpen ? 'md:ml-64' : 'md:ml-20'}`}>
         <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8 max-w-6xl mx-auto">
           {activeView === "dashboard" && (
             <>
@@ -1153,11 +1374,11 @@ const ClubLeaderDashboard = () => {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="emailReminders">Registration reminders</Label>
-                      <Switch id="emailReminders" checked={notifications.emailReminders} onCheckedChange={() => setNotifications({ ...notifications, emailReminders: !notifications.emailReminders })} />
+                      <Switch id="emailReminders" checked={notificationSettings.emailReminders} onCheckedChange={() => setNotificationSettings({ ...notificationSettings, emailReminders: !notificationSettings.emailReminders })} />
                     </div>
                     <div className="flex items-center justify-between">
                       <Label htmlFor="emailApprovals">Event approval notifications</Label>
-                      <Switch id="emailApprovals" checked={notifications.emailApprovals} onCheckedChange={() => setNotifications({ ...notifications, emailApprovals: !notifications.emailApprovals })} />
+                      <Switch id="emailApprovals" checked={notificationSettings.emailApprovals} onCheckedChange={() => setNotificationSettings({ ...notificationSettings, emailApprovals: !notificationSettings.emailApprovals })} />
                     </div>
                   </div>
                 </div>
@@ -1166,7 +1387,7 @@ const ClubLeaderDashboard = () => {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="browserNotifications">Enable browser notifications</Label>
-                      <Switch id="browserNotifications" checked={notifications.browserNotifications} onCheckedChange={() => setNotifications({ ...notifications, browserNotifications: !notifications.browserNotifications })} />
+                      <Switch id="browserNotifications" checked={notificationSettings.browserNotifications} onCheckedChange={() => setNotificationSettings({ ...notificationSettings, browserNotifications: !notificationSettings.browserNotifications })} />
                     </div>
                   </div>
                 </div>

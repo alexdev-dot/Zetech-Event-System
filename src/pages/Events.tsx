@@ -98,7 +98,7 @@ const Events = () => {
   return (
     <Layout>
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <div className="hero-gradient py-8 relative min-h-[300px] overflow-hidden">
+      <div className="hero-gradient py-6 md:py-8 relative min-h-[250px] md:min-h-[300px] overflow-hidden">
         <div className="absolute inset-0">
           <img src="https://www.zetech.ac.ke/images/students-gallery/1K1A1822.JPG"
             alt="Zetech University Students"
@@ -107,43 +107,43 @@ const Events = () => {
           <div className="absolute inset-0 bg-gradient-to-r from-primary/90 via-primary/70 to-transparent" />
           <div className="absolute inset-0 bg-black/20" />
         </div>
-        <div className="absolute top-10 left-10 w-20 h-20 bg-white/10 rounded-full blur-2xl animate-pulse" />
-        <div className="absolute bottom-10 right-10 w-32 h-32 bg-white/5 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute top-6 left-6 md:top-10 md:left-10 w-16 h-16 md:w-20 md:h-20 bg-white/10 rounded-full blur-2xl animate-pulse" />
+        <div className="absolute bottom-6 right-6 md:bottom-10 md:right-10 w-24 h-24 md:w-32 md:h-32 bg-white/5 rounded-full blur-3xl animate-pulse delay-1000" />
 
-        <div className="container relative z-10">
+        <div className="container relative z-10 px-4">
           <div className="max-w-3xl">
-            <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="w-6 h-6 text-yellow-300 animate-pulse" />
-              <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
+            <div className="flex items-center gap-2 mb-3 md:mb-4">
+              <Sparkles className="w-5 h-5 md:w-6 md:h-6 text-yellow-300 animate-pulse" />
+              <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm text-xs md:text-sm">
                 {filtered.length} Events Available
               </Badge>
             </div>
-            <h1 className="font-heading text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-4 leading-tight">
+            <h1 className="font-heading text-2xl md:text-4xl lg:text-6xl xl:text-7xl font-bold text-white mb-3 md:mb-4 leading-tight">
               Discover Campus Events
             </h1>
-            <p className="text-xl text-white/90 mb-8 max-w-2xl">
+            <p className="text-base md:text-xl text-white/90 mb-6 md:mb-8 max-w-2xl">
               Explore exciting opportunities, connect with fellow students, and make lasting memories at Zetech University
             </p>
 
             {/* Quick-jump pills linking to dedicated pages */}
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2 md:gap-3">
               <Link to="/events/today"
-                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 text-white px-4 py-2 rounded-full text-sm font-semibold transition-all hover:scale-105">
-                <Sun className="w-4 h-4" />
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 text-white px-3 py-2 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-semibold transition-all hover:scale-105">
+                <Sun className="w-3 h-3 md:w-4 md:h-4" />
                 <span>{todayCount} Today</span>
               </Link>
               <Link to="/events/week"
-                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 text-white px-4 py-2 rounded-full text-sm font-semibold transition-all hover:scale-105">
-                <TrendingUp className="w-4 h-4" />
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 text-white px-3 py-2 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-semibold transition-all hover:scale-105">
+                <TrendingUp className="w-3 h-3 md:w-4 md:h-4" />
                 <span>{weekCount} This Week</span>
               </Link>
               <Link to="/events/month"
-                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 text-white px-4 py-2 rounded-full text-sm font-semibold transition-all hover:scale-105">
-                <CalendarDays className="w-4 h-4" />
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 text-white px-3 py-2 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-semibold transition-all hover:scale-105">
+                <CalendarDays className="w-3 h-3 md:w-4 md:h-4" />
                 <span>{monthCount} This Month</span>
               </Link>
-              <div className="flex items-center gap-2 text-white/70 px-2 py-2 text-sm">
-                <MapPin className="w-4 h-4" />
+              <div className="flex items-center gap-2 text-white/70 px-2 py-2 text-xs md:text-sm">
+                <MapPin className="w-3 h-3 md:w-4 md:h-4" />
                 <span>3 Campuses</span>
               </div>
             </div>
@@ -184,12 +184,13 @@ const Events = () => {
 
         {/* Category chips - mobile dropdown, desktop horizontal */}
         <div className="mb-6 sm:mb-8">
-          {/* Mobile dropdown */}
+          {/* Mobile dropdown with better styling */}
           <div className="sm:hidden mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Category</label>
             <select
               value={activeCategory}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 bg-white text-sm font-medium focus:border-primary focus:outline-none min-h-[48px]"
+              className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 bg-white text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none min-h-[48px] appearance-none cursor-pointer"
             >
               {["All", ...categories.map(c => c.name)].map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
@@ -198,10 +199,10 @@ const Events = () => {
           </div>
 
           {/* Desktop horizontal chips */}
-          <div className="hidden sm:flex gap-2 flex-wrap overflow-x-auto scrollbar-hide">
+          <div className="hidden sm:flex gap-2 flex-wrap">
             {["All", ...categories.map(c => c.name)].map(cat => (
               <button key={cat} onClick={() => setCategory(cat)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap min-h-[40px]
                   ${activeCategory === cat
                     ? "bg-primary text-primary-foreground shadow-md"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
@@ -213,11 +214,11 @@ const Events = () => {
 
         {/* Grid */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {[1,2,3,4,5,6].map(i => (
               <Card key={i} className="animate-pulse">
-                <div className="h-48 bg-gray-200 rounded-t-2xl" />
-                <div className="p-6 space-y-4">
+                <div className="h-40 sm:h-48 bg-gray-200 rounded-t-2xl" />
+                <div className="p-4 sm:p-6 space-y-4">
                   <div className="h-4 bg-gray-200 rounded w-3/4" />
                   <div className="h-4 bg-gray-200 rounded w-1/2" />
                 </div>
@@ -244,13 +245,13 @@ const Events = () => {
           </div>
         ) : (
           <>
-            <div className="mb-6 flex items-center justify-between">
-              <p className="text-muted-foreground text-sm">
+            <div className="mb-4 sm:mb-6 flex items-center justify-between">
+              <p className="text-muted-foreground text-xs sm:text-sm">
                 Showing <span className="font-semibold text-foreground">{filtered.length}</span> upcoming event{filtered.length !== 1 ? "s" : ""}
               </p>
-              {search && <p className="text-sm text-muted-foreground">Results for "<span className="font-medium">{search}</span>"</p>}
+              {search && <p className="text-xs sm:text-sm text-muted-foreground">Results for "<span className="font-medium">{search}</span>"</p>}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
               {filtered.map(event => (
                 <div key={event.id} className="animate-fade-in">
                   <EventCard event={event} />
