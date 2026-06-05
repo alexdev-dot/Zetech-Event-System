@@ -83,7 +83,7 @@ const ClubLeaderDashboard = () => {
 
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [activeView, setActiveView] = useState("dashboard");
   const [pendingCount, setPendingCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -1208,73 +1208,81 @@ const ClubLeaderDashboard = () => {
                     <p className="text-xs md:text-sm mt-1">Submit your first event for admin approval.</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {dashboardData.myEvents.map((event: any) => (
-                      <div key={event.id} className={`p-3 md:p-4 border rounded-xl transition-colors ${event.status === "rejected" ? "bg-rose-50 border-rose-100" : event.status === "pending" ? "bg-yellow-50 border-yellow-100" : "bg-white border-gray-100 hover:border-gray-200"}`}>
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <h3 className="font-semibold text-gray-800 truncate text-sm md:text-base">{event.title}</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50">
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Event</th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Time</th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Location</th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Registrations</th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dashboardData.myEvents.map((event: any) => (
+                          <tr key={event.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${event.status === "rejected" ? "bg-rose-50" : event.status === "pending" ? "bg-yellow-50" : ""}`}>
+                            <td className="py-3 px-4">
+                              <div>
+                                <h3 className="font-semibold text-gray-800 text-sm">{event.title}</h3>
+                                <p className="text-xs text-gray-500 line-clamp-1">{event.description}</p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-600">{fmtDate(event.date)}</td>
+                            <td className="py-3 px-4 text-sm text-gray-600">{event.time?.substring(0, 5)}</td>
+                            <td className="py-3 px-4 text-sm text-gray-600">{event.location}</td>
+                            <td className="py-3 px-4">
                               <StatusBadge status={event.status} />
-                            </div>
-                            {event.status === "rejected" && (
-                              <p className="text-xs text-rose-600 mb-2">This event was not approved. You may delete it and submit a revised version.</p>
-                            )}
-                            {event.status === "pending" && (
-                              <p className="text-xs text-yellow-700 mb-2">Waiting for admin review — not yet visible to students.</p>
-                            )}
-                            <p className="text-xs md:text-sm text-gray-500 line-clamp-1 mb-2">{event.description}</p>
-                            <div className="flex flex-wrap gap-x-3 md:gap-x-4 gap-y-1 text-xs text-gray-500">
-                              <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {fmtDate(event.date)}</span>
-                              <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {event.time?.substring(0, 5)}</span>
-                              <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {event.location}</span>
-                              <span className="flex items-center gap-1">
-                                <Users className="w-3 h-3" />
-                                <button
-                                  className="text-blue-600 hover:underline"
-                                  onClick={() => viewRegistrations(event)}
-                                >
-                                  {event.registered_count ?? 0}{event.max_participants ? `/${event.max_participants}` : ""} registered
-                                </button>
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {["pending","rejected","upcoming"].includes(event.status) && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-blue-500 hover:bg-blue-50"
-                                onClick={() => openEditEvent(event)}
-                                title={event.status === "upcoming" ? "Edit & resubmit for approval" : "Edit event"}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                            )}
-                            {!["pending","rejected"].includes(event.status) && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-blue-500 hover:bg-blue-50"
+                            </td>
+                            <td className="py-3 px-4">
+                              <button
+                                className="text-sm text-blue-600 hover:underline"
                                 onClick={() => viewRegistrations(event)}
-                                title="View registrations"
                               >
-                                <Users className="w-4 h-4" />
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => handleDeleteEvent(event.id)}
-                              title="Delete event"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                                {event.registered_count ?? 0}{event.max_participants ? `/${event.max_participants}` : ""}
+                              </button>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1">
+                                {["pending","rejected","upcoming"].includes(event.status) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-blue-500 hover:bg-blue-50 h-8 w-8 p-0"
+                                    onClick={() => openEditEvent(event)}
+                                    title={event.status === "upcoming" ? "Edit & resubmit for approval" : "Edit event"}
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                {!["pending","rejected"].includes(event.status) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-blue-500 hover:bg-blue-50 h-8 w-8 p-0"
+                                    onClick={() => viewRegistrations(event)}
+                                    title="View registrations"
+                                  >
+                                    <Users className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0"
+                                  onClick={() => handleDeleteEvent(event.id)}
+                                  title="Delete event"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </CardContent>

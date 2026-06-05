@@ -232,10 +232,10 @@ const CreateEvent = () => {
                   <Label className="flex items-center gap-2 mb-3">
                     <Clock className="h-4 w-4" /> Start Time *
                   </Label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                     {/* Hour */}
                     <Select value={hour} onValueChange={setHour}>
-                      <SelectTrigger className="w-20">
+                      <SelectTrigger className="w-20 flex-1 sm:flex-none">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -249,7 +249,7 @@ const CreateEvent = () => {
 
                     {/* Minute */}
                     <Select value={minute} onValueChange={setMinute}>
-                      <SelectTrigger className="w-20">
+                      <SelectTrigger className="w-20 flex-1 sm:flex-none">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -260,13 +260,13 @@ const CreateEvent = () => {
                     </Select>
 
                     {/* AM / PM */}
-                    <div className="flex rounded-lg border overflow-hidden">
+                    <div className="flex rounded-lg border overflow-hidden flex-1 sm:flex-none">
                       {(["AM", "PM"] as const).map(period => (
                         <button
                           key={period}
                           type="button"
                           onClick={() => setAmpm(period)}
-                          className={`px-4 py-2 text-sm font-semibold transition-all
+                          className={`flex-1 px-3 sm:px-4 py-2 text-sm font-semibold transition-all
                             ${ampm === period
                               ? "bg-primary text-primary-foreground"
                               : "bg-white text-gray-600 hover:bg-gray-50"}`}
@@ -277,7 +277,7 @@ const CreateEvent = () => {
                     </div>
 
                     {/* Preview */}
-                    <span className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded-lg font-mono">
+                    <span className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded-lg font-mono w-full sm:w-auto text-center sm:text-left">
                       {hour.padStart(2, "0")}:{minute} {ampm}
                     </span>
                   </div>

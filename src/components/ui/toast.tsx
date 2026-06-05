@@ -11,32 +11,13 @@ const ToastViewport = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Viewport>,
   React.ComponentPropsWithoutRef<typeof ToastPrimitives.Viewport>
 >(({ className, ...props }, ref) => {
-  const [isMobile, setIsMobile] = React.useState(false);
-
-  React.useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
   return (
     <ToastPrimitives.Viewport
       ref={ref}
       className={cn(
-        "fixed z-[100] flex flex-col-reverse p-4 md:bottom-0 md:right-0 md:top-auto md:h-auto md:w-auto md:flex-col md:max-w-[420px]",
-        isMobile ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[50vh] w-[90%]" : "bottom-0 right-0",
+        "fixed z-[100] flex flex-col-reverse p-4 bottom-0 right-0 top-auto h-auto w-auto max-w-[420px]",
         className,
       )}
-      style={isMobile ? {
-        position: 'fixed',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        height: '50vh',
-        width: '90%',
-        maxHeight: '50vh',
-      } : undefined}
       {...props}
     />
   );
@@ -44,7 +25,7 @@ const ToastViewport = React.forwardRef<
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName;
 
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-6 pr-8 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:fade-in data-[state=open]:zoom-in md:slide-in-from-bottom-full max-sm:p-6 max-sm:items-start max-sm:justify-start max-sm:flex-col max-sm:space-x-0 max-sm:space-y-4 max-sm:text-base",
+  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-4 sm:p-6 pr-8 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:fade-in data-[state=open]:zoom-in md:slide-in-from-bottom-full max-sm:p-3 max-sm:items-start max-sm:justify-start max-sm:flex-col max-sm:space-x-0 max-sm:space-y-2 max-sm:text-sm",
   {
     variants: {
       variant: {

@@ -72,10 +72,14 @@ const Auth = () => {
         identifier.trim(),
         newStudentPassword,
       );
-      toast({
-        title: "Account Created!",
-        description: "Welcome to Zetech Events Hub.",
-      });
+      const fullName = `${firstName.trim()} ${lastName.trim()}`;
+      // Only show toast on desktop, not mobile
+      if (window.innerWidth >= 768) {
+        toast({
+          title: "Account Created!",
+          description: `Welcome, ${fullName}!`,
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Registration Error",
@@ -95,13 +99,23 @@ const Auth = () => {
         throw new Error("All fields are required");
 
       if (role === "student") {
-        await signIn(identifier.trim(), password);
-        toast({ title: "Welcome back!" });
+        const result = await signIn(identifier.trim(), password);
+        const fullName = (result as any)?.user?.name || (result as any)?.user?.email || "Student";
+        const firstName = fullName.split(' ')[0];
+        // Only show toast on desktop, not mobile
+        if (window.innerWidth >= 768) {
+          toast({ title: `Welcome back, ${firstName}!` });
+        }
         navigate("/");
       } else {
         // admin or club_leader — both use email login
-        await adminSignIn(identifier.trim(), password);
-        toast({ title: "Welcome!" });
+        const result = await adminSignIn(identifier.trim(), password);
+        const fullName = (result as any)?.user?.name || (result as any)?.user?.email || role === "admin" ? "Admin" : "Club Leader";
+        const firstName = fullName.split(' ')[0];
+        // Only show toast on desktop, not mobile
+        if (window.innerWidth >= 768) {
+          toast({ title: `Welcome, ${firstName}!` });
+        }
         // redirect handled by useEffect above
       }
     } catch (error: any) {

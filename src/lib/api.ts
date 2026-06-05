@@ -130,6 +130,23 @@ export const api = {
         method: "DELETE",
         headers: await csrfHeaders(),
       }).then(handleResponse),
+
+    trackInteraction: async (data: {
+      user_id: string | number;
+      event_id: string | number;
+      interaction_type: "view" | "click" | "register";
+      time_spent?: number;
+    }) =>
+      fetch(`${API_BASE_URL}/events/interaction`, {
+        method: "POST",
+        headers: await csrfHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(data),
+      }).then(handleResponse),
+
+    getRecommendations: (userId: string | number) =>
+      fetch(`${API_BASE_URL}/events/recommendations/${userId}`, {
+        headers: authHeaders(),
+      }).then(handleResponse),
   },
 
   students: {
@@ -382,6 +399,18 @@ export const api = {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+    },
+
+    getAuditLogs: (params?: { page?: number; limit?: number; filter?: string; failed?: boolean }) => {
+      const qp = new URLSearchParams();
+      if (params?.page) qp.set("page", String(params.page));
+      if (params?.limit) qp.set("limit", String(params.limit));
+      if (params?.filter) qp.set("filter", params.filter);
+      if (params?.failed) qp.set("failed", "true");
+      const qs = qp.toString();
+      return fetch(`${API_BASE_URL}/admin/audit-logs${qs ? `?${qs}` : ""}`, {
+        headers: authHeaders(),
+      }).then(handleResponse);
     },
   },
 

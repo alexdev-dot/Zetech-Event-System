@@ -3391,6 +3391,302 @@ app.post("/api/events/:id/gallery", requireAdmin, upload.single("image"), async 
   }
 });
 
+// ─── EVENT INTERACTIONS (for recommendations) ────────────────────────────────
+
+app.post("/api/events/interaction", authenticateToken, async (req, res) => {
+  const { user_id, event_id, interaction_type, time_spent } = req.body;
+  
+  if (!user_id || !event_id || !interaction_type) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  if (!["view", "click", "register"].includes(interaction_type)) {
+    return res.status(400).json({ message: "Invalid interaction type" });
+  }
+
+  if (req.authUser?.role !== "user" || req.authUser?.id !== parseInt(user_id)) {
+    return res.status(403).json({ message: "Unauthorized" });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO user_event_interactions (user_id, event_id, interaction_type, time_spent)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [user_id, event_id, interaction_type, time_spent || 0]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error("Interaction tracking error:", err);
+    res.status(500).json({ message: "Failed to track interaction" });
+  }
+});
+
+app.get("/api/events/recommendations/:userId", authenticateToken, async (req, res) => {
+  const userId = parseInt(req.params.userId);
+  
+  if (isNaN(userId)) {
+    return res.status(400).json({ message: "Invalid user ID" });
+  }
+
+  if (req.authUser?.role !== "user" || req.authUser?.id !== userId) {
+    return res.status(403).json({ message: "Unauthorized" });
+  }
+
+  try {
+    // Get user's interaction history
+    const { rows: interactions } = await pool.query(
+      `SELECT 
+        uei.event_id,
+        uei.interaction_type,
+        uei.time_spent,
+        e.category,
+        e.created_by,
+        a.club as event_club
+       FROM user_event_interactions uei
+       JOIN events e ON uei.event_id = e.id
+       LEFT JOIN admins a ON e.created_by = a.id
+       WHERE uei.user_id = $1
+       ORDER BY uei.created_at DESC
+       LIMIT 100`,
+      [userId]
+    );
+
+    // Calculate category affinity scores
+    const categoryScores = {};
+    const clubScores = {};
+
+    interactions.forEach((interaction) => {
+      const weight = interaction.interaction_type === "register" ? 5 :
+                     interaction.interaction_type === "click" ? 2 :
+                     interaction.interaction_type === "view" ? 1 : 0;
+      
+      const timeBonus = (interaction.time_spent || 0) * 0.1;
+      const totalScore = weight + timeBonus;
+
+      // Category affinity
+      if (interaction.category) {
+        categoryScores[interaction.category] = (categoryScores[interaction.category] || 0) + totalScore;
+      }
+
+      // Club affinity
+      if (interaction.event_club) {
+        clubScores[interaction.event_club] = (clubScores[interaction.event_club] || 0) + totalScore;
+      }
+    });
+
+    // Get upcoming events and score them
+    const { rows: events } = await pool.query(
+      `SELECT 
+        e.*,
+        a.club as event_club
+       FROM events e
+       LEFT JOIN admins a ON e.created_by = a.id
+       WHERE e.status = 'upcoming'
+       AND e.date >= CURRENT_DATE
+       ORDER BY e.date ASC, e.created_at DESC
+       LIMIT 50`
+    );
+
+    // Score events based on user's affinity
+    const scoredEvents = events.map((event) => {
+      let score = 0;
+
+      // Category affinity (40% weight)
+      if (event.category && categoryScores[event.category]) {
+        score += categoryScores[event.category] * 0.4;
+      }
+
+      // Club affinity (20% weight)
+      if (event.event_club && clubScores[event.event_club]) {
+        score += clubScores[event.event_club] * 0.2;
+      }
+
+      // Recency boost (10% weight) - newer events get slight boost
+      const daysSinceCreation = Math.floor((Date.now() - new Date(event.created_at).getTime()) / (1000 * 60 * 60 * 24));
+      if (daysSinceCreation < 7) {
+        score += (7 - daysSinceCreation) * 0.1;
+      }
+
+      // Trending boost (10% weight) - events with more registrations
+      if (event.registered_count) {
+        score += Math.min(event.registered_count * 0.1, 5);
+      }
+
+      // Random factor (20% weight) - for diversity
+      score += Math.random() * 2;
+
+      return { ...event, score };
+    });
+
+    // Sort by score and return top 8
+    const recommendations = scoredEvents
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .map(({ score, ...event }) => event);
+
+    res.json(recommendations);
+  } catch (err) {
+    console.error("Recommendations error:", err);
+    res.status(500).json({ message: "Failed to get recommendations" });
+  }
+});
+
+// ─── EVENT LIFECYCLE MANAGEMENT ─────────────────────────────────────────────────────
+
+// Scheduled job to update event lifecycle (ongoing -> missed -> archived)
+async function updateEventLifecycle() {
+  try {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    
+    // Move ongoing events to missed if date has passed
+    const missedResult = await pool.query(`
+      UPDATE events 
+      SET status = 'missed'
+      WHERE status = 'ongoing' 
+      AND date < $1
+      RETURNING id
+    `, [today]);
+    
+    if (missedResult.rowCount > 0) {
+      console.log(`[Lifecycle] Moved ${missedResult.rowCount} events to 'missed' status`);
+    }
+    
+    // Move missed events to archived after 14 days
+    const archiveDate = new Date();
+    archiveDate.setDate(archiveDate.getDate() - 14);
+    
+    const archivedResult = await pool.query(`
+      UPDATE events 
+      SET status = 'archived', archived_at = NOW()
+      WHERE status = 'missed' 
+      AND date < $1
+      RETURNING id
+    `, [archiveDate.toISOString().split('T')[0]]);
+    
+    if (archivedResult.rowCount > 0) {
+      console.log(`[Lifecycle] Moved ${archivedResult.rowCount} events to 'archived' status`);
+    }
+  } catch (err) {
+    console.error("[Lifecycle] Error updating event lifecycle:", err);
+  }
+}
+
+// Run lifecycle update on server start and schedule daily
+updateEventLifecycle();
+
+// Schedule daily lifecycle update (runs at midnight)
+setInterval(() => {
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  
+  // Run at midnight (00:00)
+  if (hours === 0 && minutes === 0) {
+    updateEventLifecycle();
+  }
+}, 60000); // Check every minute
+
+// ─── ADMIN ARCHIVE ENDPOINTS ─────────────────────────────────────────────────────
+
+// Get all archived events
+app.get("/api/admin/archive", requireAdmin, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 50), 200);
+    const offset = (page - 1) * limit;
+    
+    const { rows: events } = await pool.query(
+      `SELECT 
+        e.*,
+        a.name as created_by_name,
+        a.admin_email as created_by_email,
+        a.club as creator_club,
+        COUNT(DISTINCT er.id) as registration_count
+       FROM events e
+       LEFT JOIN admins a ON e.created_by = a.id
+       LEFT JOIN event_registrations er ON e.id = er.event_id
+       WHERE e.status = 'archived'
+       GROUP BY e.id, a.id
+       ORDER BY e.archived_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    
+    const { rows: countResult } = await pool.query(
+      `SELECT COUNT(*) as total FROM events WHERE status = 'archived'`
+    );
+    
+    res.json({
+      events,
+      pagination: {
+        page,
+        limit,
+        total: parseInt(countResult[0].total),
+        totalPages: Math.ceil(parseInt(countResult[0].total) / limit)
+      }
+    });
+  } catch (err) {
+    console.error("Archive fetch error:", err);
+    res.status(500).json({ message: "Failed to fetch archived events" });
+  }
+});
+
+// Permanently delete archived event
+app.delete("/api/admin/archive/:id", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid event ID" });
+  
+  try {
+    // Check if event is archived
+    const { rows: eventCheck } = await pool.query(
+      `SELECT id FROM events WHERE id = $1 AND status = 'archived'`,
+      [id]
+    );
+    
+    if (eventCheck.length === 0) {
+      return res.status(404).json({ message: "Archived event not found" });
+    }
+    
+    // Delete event (CASCADE will handle related records)
+    await pool.query(`DELETE FROM events WHERE id = $1`, [id]);
+    
+    console.log(`[Archive] Permanently deleted archived event ${id}`);
+    res.json({ message: "Event permanently deleted" });
+  } catch (err) {
+    console.error("Archive delete error:", err);
+    res.status(500).json({ message: "Failed to delete event" });
+  }
+});
+
+// Restore archived event (optional - move back to missed status)
+app.post("/api/admin/archive/:id/restore", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid event ID" });
+  
+  try {
+    const { rows: eventCheck } = await pool.query(
+      `SELECT id FROM events WHERE id = $1 AND status = 'archived'`,
+      [id]
+    );
+    
+    if (eventCheck.length === 0) {
+      return res.status(404).json({ message: "Archived event not found" });
+    }
+    
+    await pool.query(
+      `UPDATE events SET status = 'missed', archived_at = NULL WHERE id = $1`,
+      [id]
+    );
+    
+    console.log(`[Archive] Restored archived event ${id} to 'missed' status`);
+    res.json({ message: "Event restored to missed status" });
+  } catch (err) {
+    console.error("Archive restore error:", err);
+    res.status(500).json({ message: "Failed to restore event" });
+  }
+});
+
 // ─── SERVER START ────────────────────────────────────────────────────────────────────
 async function startServer() {
   try {

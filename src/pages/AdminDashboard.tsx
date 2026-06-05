@@ -49,6 +49,7 @@ import {
   Users as UsersIcon,
   Bell,
   Home,
+  Archive,
 } from "lucide-react";
 import zetechLogo from "@/assets/zetech-logo.png";
 import { format } from "date-fns";
@@ -77,6 +78,8 @@ type AdminEvent = {
   creator_club?: string | null;
   created_at?: string | null;
   registered_count?: number;
+  registration_count?: number;
+  archived_at?: string | null;
   category?: string | null;
 };
 
@@ -146,6 +149,204 @@ function fmtDate(d?: string | null) {
   } catch {
     return String(d);
   }
+}
+
+// ─── ARCHIVE TAB ───────────────────────────────────────────────────────────────
+
+function ArchiveTab() {
+  const [archivedEvents, setArchivedEvents] = useState<AdminEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [deleting, setDeleting] = useState<number | null>(null);
+
+  const load = async (pageNum = 1) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/admin/archive?page=${pageNum}&limit=50`);
+      const data = await response.json();
+      setArchivedEvents(data.events || []);
+      setTotalPages(data.pagination?.totalPages || 1);
+      setPage(data.pagination?.page || 1);
+    } catch (err: unknown) {
+      toast({
+        title: "Error",
+        description: getErrorMessage(err),
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load(1);
+  }, []);
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Are you sure you want to permanently delete this event? This action cannot be undone.")) return;
+    
+    setDeleting(id);
+    try {
+      const response = await fetch(`/api/admin/archive/${id}`, {
+        method: "DELETE",
+      });
+      
+      if (!response.ok) throw new Error("Failed to delete event");
+      
+      toast({
+        title: "Event deleted",
+        description: "The event has been permanently deleted.",
+      });
+      load(page);
+    } catch (err: unknown) {
+      toast({
+        title: "Error",
+        description: getErrorMessage(err),
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleRestore = async (id: number) => {
+    try {
+      const response = await fetch(`/api/admin/archive/${id}/restore`, {
+        method: "POST",
+      });
+      
+      if (!response.ok) throw new Error("Failed to restore event");
+      
+      toast({
+        title: "Event restored",
+        description: "The event has been restored to missed status.",
+      });
+      load(page);
+    } catch (err: unknown) {
+      toast({
+        title: "Error",
+        description: getErrorMessage(err),
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <Card className="border-0 shadow-sm">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Archive className="h-5 w-5" />
+          Archived Events
+        </CardTitle>
+        <CardDescription>
+          Events that were archived after 14 days. You can permanently delete them to reduce storage.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+          </div>
+        ) : archivedEvents.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            <Archive className="w-12 h-12 mx-auto mb-3 opacity-40" />
+            <p className="font-medium">No archived events</p>
+            <p className="text-sm mt-1">Events will appear here after 14 days</p>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Event</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Creator</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Registrations</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Archived</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {archivedEvents.map((event) => (
+                    <tr key={event.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-4">
+                        <div>
+                          <h3 className="font-semibold text-gray-800 text-sm">{event.title}</h3>
+                          <p className="text-xs text-gray-500 line-clamp-1">{event.description}</p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{fmtDate(event.date)}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        <div>
+                          <p className="font-medium">{event.created_by_name || "Unknown"}</p>
+                          <p className="text-xs text-gray-500">{event.creator_club || ""}</p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{event.registration_count || 0}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{fmtDate(event.archived_at)}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRestore(event.id)}
+                            className="text-blue-600 hover:bg-blue-50"
+                          >
+                            Restore
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(event.id)}
+                            disabled={deleting === event.id}
+                            className="text-red-600 hover:bg-red-50"
+                          >
+                            {deleting === event.id ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <p className="text-sm text-gray-600">
+                  Page {page} of {totalPages}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => load(page - 1)}
+                    disabled={page === 1}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => load(page + 1)}
+                    disabled={page === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 // ─── PENDING EVENTS TAB ──────────────────────────────────────────────────────
@@ -226,7 +427,7 @@ function PendingEventsTab({ onAction }: { onAction: () => void }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">
             Pending Approval
@@ -255,11 +456,11 @@ function PendingEventsTab({ onAction }: { onAction: () => void }) {
               key={ev.id}
               className="border border-yellow-200 shadow-sm bg-yellow-50/30"
             >
-              <CardContent className="p-5">
+              <CardContent className="p-4 sm:p-5">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <h3 className="font-semibold text-gray-800">
+                      <h3 className="font-semibold text-gray-800 text-sm sm:text-base truncate">
                         {ev.title ?? ""}
                       </h3>
                       <StatusBadge status={ev.status} />
@@ -267,18 +468,18 @@ function PendingEventsTab({ onAction }: { onAction: () => void }) {
                     <p className="text-sm text-gray-500 mb-3 line-clamp-2">
                       {ev.description}
                     </p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                    <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-1 text-xs text-gray-500">
                       <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" /> {fmtDate(ev.date)}
+                        <Calendar className="w-3 h-3 shrink-0" /> <span className="truncate">{fmtDate(ev.date)}</span>
                       </span>
                       <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> {ev.time?.substring(0, 5)}
+                        <Clock className="w-3 h-3 shrink-0" /> {ev.time?.substring(0, 5)}
                       </span>
                       <span className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3" /> {ev.location}
+                        <MapPin className="w-3 h-3 shrink-0" /> <span className="truncate">{ev.location}</span>
                       </span>
                       <span className="flex items-center gap-1">
-                        <Users className="w-3 h-3" />{" "}
+                        <Users className="w-3 h-3 shrink-0" />{" "}
                         {ev.max_participants
                           ? `Cap: ${ev.max_participants}`
                           : "Unlimited"}
@@ -293,17 +494,18 @@ function PendingEventsTab({ onAction }: { onAction: () => void }) {
                       {fmtDate(ev.created_at)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setViewEvent(ev)}
+                      className="min-h-[40px]"
                     >
                       <Eye className="w-4 h-4 mr-1" /> View
                     </Button>
                     <Button
                       size="sm"
-                      className="bg-green-600 hover:bg-green-700 text-white"
+                      className="bg-green-600 hover:bg-green-700 text-white min-h-[40px]"
                       onClick={() => approve(ev.id)}
                       disabled={actioning === ev.id}
                     >
@@ -313,7 +515,7 @@ function PendingEventsTab({ onAction }: { onAction: () => void }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="text-red-600 border-red-200 hover:bg-red-50"
+                      className="text-red-600 border-red-200 hover:bg-red-50 min-h-[40px]"
                       onClick={() => reject(ev.id)}
                       disabled={actioning === ev.id}
                     >
@@ -330,9 +532,9 @@ function PendingEventsTab({ onAction }: { onAction: () => void }) {
 
       {/* View detail dialog */}
       <Dialog open={!!viewEvent} onOpenChange={() => setViewEvent(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-[95vw] sm:max-w-lg w-full mx-4">
           <DialogHeader>
-            <DialogTitle>Event Details</DialogTitle>
+            <DialogTitle className="text-base sm:text-lg">Event Details</DialogTitle>
           </DialogHeader>
           {viewEvent && (
             <div className="space-y-3 pt-2">
@@ -608,19 +810,19 @@ function AllEventsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">All Events</h2>
           <p className="text-sm text-gray-500">
             {events.length} events total (all statuses)
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <Input
             placeholder="Search events..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-52"
+            className="w-full sm:w-52"
           />
           <Button variant="outline" size="sm" onClick={load}>
             <RefreshCw className="w-4 h-4" />
@@ -630,14 +832,14 @@ function AllEventsTab() {
 
       {/* Filters and Bulk Actions */}
       <Card className="border-0 shadow-sm">
-        <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex flex-col lg:flex-row gap-3 sm:gap-4 items-start lg:items-center justify-between">
             {/* Filters */}
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 text-sm border rounded-md"
+                className="px-3 py-2 text-sm border rounded-md w-full sm:w-auto min-h-[40px]"
                 aria-label="Filter by status"
                 title="Filter by status"
               >
@@ -652,7 +854,7 @@ function AllEventsTab() {
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-3 py-2 text-sm border rounded-md"
+                className="px-3 py-2 text-sm border rounded-md w-full sm:w-auto min-h-[40px]"
                 aria-label="Filter by category"
                 title="Filter by category"
               >
@@ -667,7 +869,7 @@ function AllEventsTab() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="px-3 py-2 text-sm border rounded-md"
+                className="px-3 py-2 text-sm border rounded-md w-full sm:w-auto min-h-[40px]"
                 aria-label="Sort events"
                 title="Sort events"
               >
@@ -682,6 +884,7 @@ function AllEventsTab() {
                 onClick={() =>
                   setSortOrder(sortOrder === "asc" ? "desc" : "asc")
                 }
+                className="min-h-[40px]"
               >
                 {sortOrder === "asc" ? "↑" : "↓"}
               </Button>
@@ -696,6 +899,7 @@ function AllEventsTab() {
                   setSortBy("date");
                   setSortOrder("desc");
                 }}
+                className="min-h-[40px]"
               >
                 Clear Filters
               </Button>
@@ -703,7 +907,7 @@ function AllEventsTab() {
 
             {/* Bulk Actions */}
             {selectedEvents.size > 0 && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
                 <span className="text-sm text-gray-600">
                   {selectedEvents.size} selected
                 </span>
@@ -711,7 +915,7 @@ function AllEventsTab() {
                   variant="outline"
                   size="sm"
                   onClick={bulkApprove}
-                  className="text-green-600 border-green-200 hover:bg-green-50"
+                  className="text-green-600 border-green-200 hover:bg-green-50 min-h-[40px]"
                 >
                   <CheckCircle className="w-4 h-4 mr-1" /> Approve
                 </Button>
@@ -719,7 +923,7 @@ function AllEventsTab() {
                   variant="outline"
                   size="sm"
                   onClick={bulkReject}
-                  className="text-yellow-600 border-yellow-200 hover:bg-yellow-50"
+                  className="text-yellow-600 border-yellow-200 hover:bg-yellow-50 min-h-[40px]"
                 >
                   <XCircle className="w-4 h-4 mr-1" /> Reject
                 </Button>
@@ -727,7 +931,7 @@ function AllEventsTab() {
                   variant="outline"
                   size="sm"
                   onClick={bulkDelete}
-                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  className="text-red-600 border-red-200 hover:bg-red-50 min-h-[40px]"
                 >
                   <Trash2 className="w-4 h-4 mr-1" /> Delete
                 </Button>
@@ -768,35 +972,35 @@ function AllEventsTab() {
               key={ev.id}
               className={`border-0 shadow-sm ${selectedEvents.has(ev.id) ? "ring-2 ring-blue-500" : ""}`}
             >
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 flex-1">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
                     <input
                       type="checkbox"
                       checked={selectedEvents.has(ev.id)}
                       onChange={() => toggleEventSelection(ev.id)}
-                      className="w-4 h-4 mt-1"
+                      className="w-4 h-4 mt-1 shrink-0"
                       aria-label={`Select event ${ev.title || ev.id}`}
                       title={`Select event ${ev.title || ev.id}`}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-medium text-gray-800 truncate">
+                        <span className="font-medium text-gray-800 truncate text-sm sm:text-base">
                           {ev.title ?? ""}
                         </span>
                         <StatusBadge status={ev.status} />
                       </div>
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
-                        <span>
-                          <Calendar className="inline w-3 h-3 mr-1" />
-                          {fmtDate(ev.date)}
+                      <div className="flex flex-wrap gap-x-2 sm:gap-x-3 gap-y-1 text-xs text-gray-500">
+                        <span className="flex items-center">
+                          <Calendar className="inline w-3 h-3 mr-1 shrink-0" />
+                          <span className="truncate">{fmtDate(ev.date)}</span>
                         </span>
-                        <span>
-                          <MapPin className="inline w-3 h-3 mr-1" />
-                          {ev.location}
+                        <span className="flex items-center">
+                          <MapPin className="inline w-3 h-3 mr-1 shrink-0" />
+                          <span className="truncate">{ev.location}</span>
                         </span>
-                        <span>
-                          <Users className="inline w-3 h-3 mr-1" />
+                        <span className="flex items-center">
+                          <Users className="inline w-3 h-3 mr-1 shrink-0" />
                           {ev.registered_count ?? 0}
                           {ev.max_participants
                             ? `/${ev.max_participants}`
@@ -804,7 +1008,7 @@ function AllEventsTab() {
                           registered
                         </span>
                         {ev.creator_club && (
-                          <span>Club: {ev.creator_club}</span>
+                          <span className="truncate">Club: {ev.creator_club}</span>
                         )}
                       </div>
                     </div>
@@ -812,7 +1016,8 @@ function AllEventsTab() {
                   <div className="flex items-center gap-1 shrink-0">
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="icon"
+                      className="h-8 w-8 sm:h-9 sm:w-9"
                       onClick={() => viewRegistrations(ev)}
                       title="View registrations"
                     >
@@ -820,8 +1025,8 @@ function AllEventsTab() {
                     </Button>
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="text-red-500 hover:bg-red-50"
+                      size="icon"
+                      className="h-8 w-8 sm:h-9 sm:w-9 text-red-500 hover:bg-red-50"
                       onClick={() => deleteEvent(ev.id)}
                       title="Delete event"
                     >
@@ -837,9 +1042,9 @@ function AllEventsTab() {
 
       {/* Registrations Dialog */}
       <Dialog open={!!viewRegs} onOpenChange={() => setViewRegs(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-[95vw] sm:max-w-lg w-full mx-4">
           <DialogHeader>
-            <DialogTitle>Registrations — {viewRegs?.event?.title}</DialogTitle>
+            <DialogTitle className="text-base sm:text-lg">Registrations — {viewRegs?.event?.title}</DialogTitle>
           </DialogHeader>
           <div className="pt-2">
             {regsLoading ? (
@@ -851,21 +1056,21 @@ function AllEventsTab() {
                 No registrations yet.
               </p>
             ) : (
-              <div className="max-h-80 overflow-y-auto space-y-2">
+              <div className="max-h-60 sm:max-h-80 overflow-y-auto space-y-2">
                 {viewRegs?.regs.map((r, i) => (
                   <div
                     key={i}
-                    className="flex justify-between items-center py-2 border-b border-gray-100 last:border-0"
+                    className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-2 py-2 border-b border-gray-100 last:border-0"
                   >
-                    <div>
-                      <p className="text-sm font-medium">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
                         {r.first_name} {r.last_name}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 truncate">
                         {r.admission_number} · {r.email}
                       </p>
                     </div>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-400 shrink-0">
                       {fmtDate(r.registration_date)}
                     </span>
                   </div>
@@ -1156,10 +1361,7 @@ function SecurityAuditLog() {
   const load = async (p = page, f = filter, failed = onlyFailed) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(p), limit: String(limit) });
-      if (f) params.set("filter", f);
-      if (failed) params.set("failed", "true");
-      const data = await api.get(`/admin/audit-logs?${params}`);
+      const data = await api.admin.getAuditLogs({ page: p, limit, filter: f, failed });
       setLogs(data.logs || []);
       setTotal(data.total || 0);
     } catch {
@@ -1317,7 +1519,7 @@ const AdminDashboard = () => {
   const [showPwd, setShowPwd] = useState(false);
   const [savingPwd, setSavingPwd] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [activeView, setActiveView] = useState("dashboard");
 
   const loadStats = async () => {
@@ -1381,6 +1583,7 @@ const AdminDashboard = () => {
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "pending", label: "Pending Events", icon: Bell, badge: pendingCount },
     { id: "events", label: "All Events", icon: FileText },
+    { id: "archive", label: "Archive", icon: Archive },
     { id: "analytics", label: "Analytics", icon: TrendingUp },
     { id: "leaders", label: "Club Leaders", icon: UsersIcon },
     { id: "students", label: "Students", icon: Users },
@@ -1731,6 +1934,7 @@ const AdminDashboard = () => {
             <PendingEventsTab onAction={loadStats} />
           )}
           {activeView === "events" && <AllEventsTab />}
+          {activeView === "archive" && <ArchiveTab />}
           {activeView === "leaders" && <ClubLeadersTab />}
           {activeView === "students" && <StudentManagement />}
           {activeView === "analytics" && <AdminAnalytics />}

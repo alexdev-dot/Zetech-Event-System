@@ -17,6 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useSocket } from "@/contexts/SocketContext";
+import { useEventInteraction } from "@/hooks/useEventInteraction";
 import { useState, useEffect, useRef } from "react";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -48,6 +49,7 @@ const EventDetail = () => {
   const { user } = useAuth();
   const { socket } = useSocket();
   const navigate = useNavigate();
+  const { trackViewStart, trackViewEnd, trackClick, trackRegistration } = useEventInteraction();
 
   // Core event state
   const [event, setEvent] = useState<Event | null>(null);
@@ -99,8 +101,15 @@ const EventDetail = () => {
         category: ev.category,
         featured: false,
       });
+      // Track view start when event loads
+      trackViewStart(ev.id);
     }).catch(() => setEvent(null));
-  }, [id]);
+
+    // Track view end when component unmounts
+    return () => {
+      trackViewEnd();
+    };
+  }, [id, trackViewStart, trackViewEnd]);
 
   // ── Load all engagement data ─────────────────────────────────────────────────
   useEffect(() => {
@@ -263,7 +272,7 @@ const EventDetail = () => {
   return (
     <Layout>
       {/* Hero */}
-      <div className="relative min-h-[40vh] md:min-h-[50vh] lg:min-h-[60vh] overflow-hidden">
+      <div className="relative min-h-[30vh] sm:min-h-[35vh] md:min-h-[40vh] lg:min-h-[50vh] overflow-hidden">
         {event.posterUrl ? (
           <div className="absolute inset-0">
             <img src={event.posterUrl} alt={event.title} className="w-full h-full object-cover" />
@@ -307,10 +316,10 @@ const EventDetail = () => {
         </div>
       </div>
 
-      <div className="container py-8 md:py-12 px-4">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+      <div className="container py-6 md:py-8 lg:py-12 px-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
           {/* ── Main Content ─────────────────────────────────────────────────── */}
-          <div className="lg:col-span-2 space-y-6 md:space-y-8">
+          <div className="lg:col-span-2 space-y-4 md:space-y-6 lg:space-y-8">
 
             {/* About */}
             <Card className="border-0 shadow-xl">
